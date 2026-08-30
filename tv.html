@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Banco de pruebas</title>
+<style>
+  :root {
+    --bg: #0E1633;
+    --panel: #182150;
+    --edge: #2C3873;
+    --ink: #E6EAF7;
+    --muted: #8B96C4;
+    --relay: #FFB020;
+    --direct: #3FE0C8;
+    --bad: #FF6B7A;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%; overflow: hidden;
+    background: var(--bg); color: var(--ink);
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  }
+  body { padding: 3.5vh 3.5vw; }
+  .screen { display: none; height: 100%; }
+  .screen.on { display: block; }
+
+  /* ---------- Emparejamiento ---------- */
+  #pair { text-align: center; }
+  #pair .lead {
+    font-size: 2.6vw; color: var(--muted); margin: 6vh 0 1vh;
+    font-weight: 400; letter-spacing: 0.01em;
+  }
+  #url {
+    font-size: 4.4vw; font-weight: 700; color: var(--direct);
+    word-break: break-all; margin-bottom: 5vh;
+  }
+  #code {
+    font-family: "Courier New", monospace;
+    font-size: 16vw; font-weight: 700; line-height: 1;
+    letter-spacing: 0.12em; margin: 0 0 1vh; text-indent: 0.12em;
+  }
+  #pair .hint { font-size: 2.1vw; color: var(--muted); }
+
+  /* ---------- Prueba ---------- */
+  #field {
+    width: 100%; height: 46vh; display: block;
+    background: var(--panel); border: 2px solid var(--edge);
+  }
+  .rows { display: flex; margin-top: 2.5vh; }
+  .col { flex: 1; }
+  .col + .col { margin-left: 2vw; }
+  .card {
+    background: var(--panel); border: 2px solid var(--edge);
+    padding: 1.6vh 1.6vw; height: 100%;
+  }
+  .card.relay { border-left: 0.9vw solid var(--relay); }
+  .card.direct { border-left: 0.9vw solid var(--direct); }
+  .name { font-size: 2.1vw; font-weight: 700; margin-bottom: 0.4vh; }
+  .sub { font-size: 1.35vw; color: var(--muted); margin-bottom: 1.4vh; }
+  .big {
+    font-family: "Courier New", monospace;
+    font-size: 8.5vw; font-weight: 700; line-height: 1;
+  }
+  .big .u { font-size: 2.6vw; color: var(--muted); margin-left: 0.4vw; }
+  .detail {
+    font-family: "Courier New", monospace;
+    font-size: 1.8vw; color: var(--muted); margin-top: 1vh;
+  }
+  .off { color: var(--bad); }
+</style>
+</head>
+<body>
+
+<div id="pair" class="screen on">
+  <div class="lead">Abre esta dirección en el celular</div>
+  <div id="url">…</div>
+  <div class="lead">y escribe este código</div>
+  <div id="code">····</div>
+  <div class="hint">Los dos aparatos deben estar en el mismo Wi-Fi</div>
+</div>
+
+<div id="test" class="screen">
+  <canvas id="field"></canvas>
+  <div class="rows">
+    <div class="col"><div class="card relay">
+      <div class="name">Por el servidor</div>
+      <div class="sub">WebSocket, sale a internet y vuelve</div>
+      <div class="big"><span id="wsP50">—</span><span class="u">ms</span></div>
+      <div class="detail" id="wsMore">p95 — · máx — · pérdida —</div>
+    </div></div>
+    <div class="col"><div class="card direct">
+      <div class="name">Directo por la red local</div>
+      <div class="sub">WebRTC, celular a TV sin intermediario</div>
+      <div class="big"><span id="rtcP50">—</span><span class="u">ms</span></div>
+      <div class="detail" id="rtcMore">esperando conexión</div>
+    </div></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
+  var ws = new WebSocket(proto + location.host);
+  var pc = null, dc = null;
+
+  var el = function (id) { return document.getElementById(id); };
+  el('url').textContent = location.host + '/pad';
+
+  // Estado que dibuja el canvas
+  var relay = { x: 0.5, y: 0.5, seen: 0 };
+  var direct = { x: 0.5, y: 0.5, seen: 0 };
+  var tilt = { x: 0, y: 0 };
+
+  function show(id) {
+    var all = document.querySelectorAll('.screen');
+    for (var i = 0; i < all.length; i++) all[i].className = 'screen';
+    el(id).className = 'screen on';
+    if (id === 'test') sizeCanvas();
+  }
+
+  // -------------------------------------------------------------------------
+  // Señalización
+  // -------------------------------------------------------------------------
+  ws.onopen = function () { ws.send('{"t":"host"}'); };
+
+  ws.onmessage = function (ev) {
+    var text = ev.data;
+
+    // Eco inmediato del input que llegó por WebSocket.
+    if (text.lastIndexOf('{"t":"r"', 0) === 0) {
+      var p = JSON.parse(text);
+      relay.x = p.x; relay.y = p.y; relay.seen = Date.now();
+      if (p.gx !== undefined) { tilt.x = p.gx; tilt.y = p.gy; }
+      ws.send('{"t":"r","c":"ws","e":1,"s":' + p.s + '}');
+      return;
+    }
+
+    var msg = JSON.parse(text);
+    if (msg.t === 'room') { el('code').textContent = msg.code; return; }
+    if (msg.t === 'peer') { show('test'); startRTC(); return; }
+    if (msg.t === 'gone') { location.reload(); return; }
+    if (msg.t === 'signal') { onSignal(msg.data); return; }
+  };
+
+  ws.onclose = function () {
+    el('code').textContent = '····';
+    el('url').textContent = 'Se cayó la conexión. Recarga la página.';
+  };
+
+  // -------------------------------------------------------------------------
+  // WebRTC. El TV solo responde; ofrecer es más frágil en navegadores viejos.
+  // -------------------------------------------------------------------------
+  function startRTC() {
+    if (typeof RTCPeerConnection === 'undefined') {
+      el('rtcMore').innerHTML = '<span class="off">este TV no soporta WebRTC</span>';
+      return;
+    }
+    pc = new RTCPeerConnection({
+      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+    });
+    pc.onicecandidate = function (e) {
+      if (e.candidate) ws.send(JSON.stringify({ t: 'signal', data: { ice: e.candidate } }));
+    };
+    pc.oniceconnectionstatechange = function () {
+      if (pc.iceConnectionState === 'failed') {
+        el('rtcMore').innerHTML = '<span class="off">no se pudo conectar directo</span>';
+      }
+    };
+    pc.ondatachannel = function (e) {
+      dc = e.channel;
+      dc.onmessage = function (ev) {
+        var p = JSON.parse(ev.data);
+        direct.x = p.x; direct.y = p.y; direct.seen = Date.now();
+        if (p.gx !== undefined) { tilt.x = p.gx; tilt.y = p.gy; }
+        dc.send('{"c":"rtc","e":1,"s":' + p.s + '}');
+      };
+    };
+  }
+
+  function onSignal(data) {
+    if (!pc) return;
+    if (data.sdp) {
+      pc.setRemoteDescription(new RTCSessionDescription(data.sdp))
+        .then(function () { return pc.createAnswer(); })
+        .then(function (answer) { return pc.setLocalDescription(answer); })
+        .then(function () {
+          ws.send(JSON.stringify({ t: 'signal', data: { sdp: pc.localDescription } }));
+        })
+        .catch(function (err) {
+          el('rtcMore').innerHTML = '<span class="off">error: ' + err.message + '</span>';
+        });
+    } else if (data.ice) {
+      pc.addIceCandidate(new RTCIceCandidate(data.ice)).catch(function () {});
+    } else if (data.stats) {
+      el('wsP50').textContent = data.stats.wsP50;
+      el('wsMore').textContent = data.stats.wsMore;
+      el('rtcP50').textContent = data.stats.rtcP50;
+      el('rtcMore').textContent = data.stats.rtcMore;
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Dibujo. Los dos cuadros corren la misma carrera; el retraso se ve solo.
+  // -------------------------------------------------------------------------
+  var cv = el('field'), cx = cv.getContext('2d');
+
+  function sizeCanvas() {
+    cv.width = cv.clientWidth;
+    cv.height = cv.clientHeight;
+  }
+  window.addEventListener('resize', sizeCanvas);
+
+  function box(state, color) {
+    var stale = Date.now() - state.seen > 700;
+    var s = Math.max(28, cv.width * 0.035);
+    var x = state.x * (cv.width - s);
+    var y = state.y * (cv.height - s);
+    cx.globalAlpha = stale ? 0.18 : 1;
+    cx.fillStyle = color;
+    cx.fillRect(x, y, s, s);
+    cx.globalAlpha = 1;
+  }
+
+  function draw() {
+    cx.fillStyle = '#182150';
+    cx.fillRect(0, 0, cv.width, cv.height);
+
+    // Retícula movida por el giroscopio
+    var gx = (0.5 + tilt.x * 0.5) * cv.width;
+    var gy = (0.5 + tilt.y * 0.5) * cv.height;
+    cx.strokeStyle = '#2C3873';
+    cx.lineWidth = 2;
+    cx.beginPath();
+    cx.moveTo(gx, 0); cx.lineTo(gx, cv.height);
+    cx.moveTo(0, gy); cx.lineTo(cv.width, gy);
+    cx.stroke();
+
+    box(relay, '#FFB020');
+    box(direct, '#3FE0C8');
+    requestAnimationFrame(draw);
+  }
+  draw();
+})();
+</script>
+</body>
+</html>

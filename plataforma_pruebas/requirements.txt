@@ -1,0 +1,14 @@
+fastapi>=0.111
+uvicorn[standard]>=0.30
+sqlalchemy>=2.0
+pydantic>=2.7
+pydantic-settings>=2.2
+email-validator>=2.1
+python-multipart>=0.0.9
+PyJWT>=2.8
+bcrypt>=4.1
+openpyxl>=3.1          # lectura/creación de planillas Excel (carga de alumnos)
+
+# Driver de PostgreSQL (solo si usas Postgres en vez del SQLite por defecto).
+# Descoméntalo cuando cambies DATABASE_URL a postgresql+psycopg://...
+# psycopg[binary]>=3.1

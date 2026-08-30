@@ -1,0 +1,1164 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Plataforma de Pruebas</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/katex.min.css" />
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/katex.min.js"></script>
+<style>
+  :root{
+    --azul:#1d4ed8; --azul-osc:#15307a; --azul-tinta:#0b1f4b;
+    --celeste:#38bdf8; --celeste-2:#7dd3fc; --celeste-bg:#e6f4fe;
+    --azul-bg:#eef5ff; --blanco:#fff;
+    --texto:#0f2440; --gris:#5b7291; --gris-claro:#8fa6c0;
+    --borde:#d5e6fa; --ok:#0e9f6e; --err:#dc2626; --warn:#b45309;
+    --sombra:0 8px 24px rgba(21,48,122,.10);
+    --sombra-lg:0 18px 50px rgba(21,48,122,.22);
+    --r:14px;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;color:var(--texto);
+    font-family:"Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;
+    background:
+      radial-gradient(1100px 600px at 8% -5%, #cfeafe 0%, transparent 55%),
+      radial-gradient(900px 600px at 100% 0%, #dceafe 0%, transparent 50%),
+      linear-gradient(165deg,var(--celeste-bg) 0%, var(--azul-bg) 55%, #ffffff 100%);
+    background-attachment:fixed;
+  }
+  button{font-family:inherit}
+  .hidden{display:none!important}
+
+  /* ---------- Controles base ---------- */
+  label{display:block;font-size:12px;font-weight:600;color:var(--gris);margin:0 0 5px 2px}
+  input,select,textarea{
+    width:100%;padding:10px 12px;border:1px solid var(--borde);border-radius:10px;
+    font-size:14px;background:#fbfdff;color:var(--texto);font-family:inherit
+  }
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--celeste-2);border-color:var(--celeste)}
+  textarea{resize:vertical;min-height:64px}
+  .btn{
+    background:var(--azul);color:#fff;border:none;border-radius:10px;padding:10px 16px;
+    font-size:14px;font-weight:600;cursor:pointer;transition:.15s;white-space:nowrap
+  }
+  .btn:hover{background:var(--azul-osc)}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  .btn.ghost{background:#fff;color:var(--azul);border:1px solid var(--borde)}
+  .btn.ghost:hover{background:var(--azul-bg);border-color:var(--celeste)}
+  .btn.mini{padding:6px 10px;font-size:12px;border-radius:8px}
+  .btn.danger{background:#fff;color:var(--err);border:1px solid #f6cccc}
+  .btn.danger:hover{background:#fef2f2}
+  .btn.cta{background:linear-gradient(100deg,var(--azul),var(--celeste));box-shadow:var(--sombra)}
+  .muted{color:var(--gris);font-size:13px}
+  .chip{display:inline-block;background:var(--celeste-bg);color:var(--azul-osc);
+        border-radius:999px;padding:3px 10px;font-size:12px;font-weight:700}
+  .chip.on{background:var(--azul);color:#fff}
+  .chip.ok{background:#d7f7e7;color:#065f46}
+
+  /* ================= LOGIN / REGISTRO ================= */
+  #authView{min-height:100vh;display:grid;place-items:center;padding:24px}
+  .auth-card{
+    width:100%;max-width:420px;background:rgba(255,255,255,.92);backdrop-filter:blur(6px);
+    border:1px solid var(--borde);border-radius:20px;box-shadow:var(--sombra-lg);
+    padding:30px 28px;
+  }
+  .brand{display:flex;align-items:center;gap:11px;margin-bottom:4px}
+  .logo{width:38px;height:38px;border-radius:11px;flex:0 0 auto;
+    background:linear-gradient(135deg,var(--azul),var(--celeste));
+    display:grid;place-items:center;color:#fff;font-size:19px}
+  .brand h1{margin:0;font-size:19px;letter-spacing:.2px;color:var(--azul-tinta)}
+  .auth-sub{margin:0 0 20px;font-size:13px;color:var(--gris)}
+  /* Conmutador: solo cambia el formulario, el fondo se mantiene */
+  .switch{display:flex;background:var(--azul-bg);border:1px solid var(--borde);
+          border-radius:11px;padding:4px;margin-bottom:20px}
+  .switch button{flex:1;border:none;background:transparent;padding:9px;border-radius:8px;
+                 font-size:13px;font-weight:700;color:var(--gris);cursor:pointer;transition:.18s}
+  .switch button.on{background:#fff;color:var(--azul);box-shadow:0 2px 8px rgba(21,48,122,.12)}
+  .field{margin-bottom:13px}
+  .auth-msg{font-size:13px;margin:12px 0 0;padding:9px 11px;border-radius:9px;display:none}
+  .auth-msg.err{display:block;background:#fef2f2;color:var(--err);border:1px solid #f6cccc}
+  .auth-msg.ok{display:block;background:#ecfdf5;color:var(--ok);border:1px solid #b9ebd5}
+  .api-line{margin-top:18px;padding-top:14px;border-top:1px solid var(--borde);
+            display:flex;align-items:center;gap:8px;font-size:12px;color:var(--gris-claro)}
+  .api-line input{padding:5px 9px;font-size:12px;flex:1}
+  .dot{width:8px;height:8px;border-radius:50%;background:#f59e0b;flex:0 0 auto}
+  .dot.on{background:#22c55e}.dot.off{background:#ef4444}
+
+  /* ================= APP (SIDEBAR + MAIN) ================= */
+  #appView{display:grid;grid-template-columns:250px 1fr;min-height:100vh}
+  aside{
+    background:linear-gradient(180deg,var(--azul-tinta),var(--azul-osc) 60%,#1b3f9e);
+    color:#fff;padding:22px 16px;display:flex;flex-direction:column;gap:6px;
+    position:sticky;top:0;height:100vh
+  }
+  aside .brand h1{color:#fff;font-size:16px}
+  aside .brand{margin-bottom:22px}
+  .nav{display:flex;flex-direction:column;gap:6px;flex:1}
+  .nav button{
+    display:flex;align-items:center;gap:11px;width:100%;text-align:left;
+    background:transparent;border:none;color:#cddffb;padding:11px 12px;border-radius:10px;
+    font-size:14px;font-weight:600;cursor:pointer;transition:.15s
+  }
+  .nav button:hover{background:rgba(255,255,255,.09);color:#fff}
+  .nav button.on{background:#fff;color:var(--azul-osc);box-shadow:var(--sombra)}
+  .nav .ic{font-size:16px;width:20px;text-align:center}
+  .who{border-top:1px solid rgba(255,255,255,.18);padding-top:14px;font-size:12px;color:#cddffb}
+  .who b{display:block;color:#fff;font-size:13px;margin-bottom:2px}
+
+  main{padding:26px 30px 60px;max-width:1180px}
+  .page-head{margin-bottom:20px}
+  .page-head h2{margin:0 0 4px;font-size:23px;color:var(--azul-tinta)}
+  .card{background:#fff;border:1px solid var(--borde);border-radius:var(--r);box-shadow:var(--sombra);margin-bottom:18px}
+  .card > h3{margin:0;padding:13px 18px;font-size:14px;color:var(--azul-osc);
+             border-bottom:1px solid var(--borde);display:flex;justify-content:space-between;
+             align-items:center;gap:10px;background:linear-gradient(90deg,var(--celeste-bg),transparent)}
+  .card .in{padding:18px}
+  .grid2{display:grid;grid-template-columns:340px 1fr;gap:18px;align-items:start}
+  .row{display:flex;gap:10px;flex-wrap:wrap}
+  .row > .f{flex:1 1 170px}
+
+  /* Listas */
+  .lst{display:flex;flex-direction:column;gap:8px}
+  .it{display:flex;align-items:center;justify-content:space-between;gap:10px;
+      border:1px solid var(--borde);border-radius:10px;padding:10px 12px;background:#fbfdff;cursor:pointer}
+  .it:hover{border-color:var(--celeste)}
+  .it.on{border-color:var(--azul);background:var(--azul-bg);box-shadow:inset 3px 0 0 var(--azul)}
+  .it .nm{font-weight:600;font-size:14px}
+  .it .sub{font-size:12px;color:var(--gris)}
+  .acts{display:flex;gap:6px}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.5px;
+     color:var(--gris);padding:8px 10px;border-bottom:2px solid var(--borde)}
+  td{padding:9px 10px;border-bottom:1px solid #eef4fb}
+  tr:hover td{background:#fafcff}
+  .empty{text-align:center;padding:26px 16px;color:var(--gris);font-size:13px}
+  .empty .big{font-size:26px;display:block;margin-bottom:6px;opacity:.6}
+
+  /* Excel */
+  .drop{border:2px dashed var(--celeste);border-radius:12px;background:#f4fbff;
+        padding:20px;text-align:center;transition:.15s}
+  .drop.hot{background:var(--celeste-bg);border-color:var(--azul)}
+  .drop .big{font-size:28px;display:block;margin-bottom:6px}
+  .sheet{border:1px solid var(--borde);border-radius:9px;overflow:hidden;margin-top:12px}
+  .sheet th{background:var(--azul-bg);border-bottom:1px solid var(--borde);padding:7px 10px}
+  .sheet td{padding:7px 10px;font-size:13px}
+  .res{border:1px solid var(--borde);border-radius:10px;padding:12px;background:#f7fbff;margin-top:12px}
+  .stats{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+  .stat{background:#fff;border:1px solid var(--borde);border-radius:9px;padding:7px 11px;font-size:12px}
+  .stat b{display:block;font-size:17px;color:var(--azul)}
+  .err-row{font-size:12px;color:var(--warn);background:#fffbeb;border-radius:6px;padding:5px 8px;margin-top:4px}
+
+  /* Constructor de preguntas */
+  .blk{border:1px dashed var(--celeste);border-radius:10px;padding:11px;background:#f6fcff;margin-bottom:8px}
+  .blk-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:7px}
+  .prev{margin-top:7px;padding:9px;background:#fff;border:1px solid var(--borde);border-radius:8px;min-height:28px}
+  .opt{display:flex;gap:8px;align-items:center;margin-bottom:7px}
+  .opt select{max-width:105px}
+  .opt input[type=text]{flex:1}
+  .chk{display:flex;align-items:center;gap:5px;white-space:nowrap;font-size:12px;font-weight:600;color:var(--gris)}
+  .chk input{width:auto}
+  .thumb{max-height:80px;border-radius:8px;border:1px solid var(--borde);margin-top:7px;display:block}
+  .q-item{border:1px solid var(--borde);border-radius:10px;padding:11px 13px;background:#fbfdff;margin-bottom:8px}
+  .q-item .q-h{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+
+  /* Vista previa hoja */
+  .paper{background:#fff;border:1px solid var(--borde);border-radius:10px;padding:26px;box-shadow:var(--sombra)}
+  .paper-h{border:1.5px solid var(--azul-tinta);border-radius:8px;padding:12px;margin-bottom:20px;
+           display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px}
+  .paper-h .fld{border-bottom:1px solid #9fb8d8;padding-bottom:3px}
+  .paper-h .fld span{color:var(--gris);font-weight:700}
+  .qq{margin-bottom:20px}
+  .qq h4{margin:0 0 7px;font-size:14px;color:var(--azul-tinta)}
+  .line{border-bottom:1px solid #b9d4f0;height:24px;margin:7px 0}
+  .anchor{width:14px;height:14px;border:3px solid var(--azul-tinta);border-radius:2px}
+  .paper-top{display:flex;justify-content:space-between;margin-bottom:8px}
+  .qr-box{width:52px;height:52px;border:1.5px solid var(--azul-tinta);border-radius:6px;
+          display:grid;place-items:center;font-size:8px;color:var(--gris);text-align:center;line-height:1.15}
+
+  /* Toast + modal */
+  #toasts{position:fixed;right:18px;bottom:18px;display:flex;flex-direction:column;gap:8px;z-index:60}
+  .toast{background:#fff;border-left:4px solid var(--azul);border-radius:9px;padding:11px 14px;
+         box-shadow:var(--sombra-lg);font-size:13px;max-width:340px;animation:sl .2s ease}
+  .toast.ok{border-left-color:var(--ok)} .toast.err{border-left-color:var(--err)}
+  @keyframes sl{from{transform:translateX(20px);opacity:0}}
+  .modal{position:fixed;inset:0;background:rgba(11,31,75,.45);display:grid;place-items:center;
+         padding:20px;z-index:50}
+  .modal .box{background:#fff;border-radius:16px;box-shadow:var(--sombra-lg);max-width:640px;width:100%;
+              max-height:85vh;overflow:auto}
+  .modal .box h3{margin:0;padding:15px 20px;border-bottom:1px solid var(--borde);color:var(--azul-tinta);font-size:16px}
+  .modal .box .mi{padding:18px 20px}
+  .modal .box .mf{padding:13px 20px;border-top:1px solid var(--borde);display:flex;justify-content:flex-end;gap:8px}
+
+  code.mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;
+            background:var(--azul-bg);padding:2px 6px;border-radius:5px;color:var(--azul-osc)}
+  pre{background:#0b1f3a;color:#cfe4ff;padding:14px;border-radius:10px;overflow:auto;font-size:12px;max-height:340px}
+
+  @media (max-width:900px){
+    #appView{grid-template-columns:1fr}
+    aside{position:static;height:auto;flex-direction:row;align-items:center;flex-wrap:wrap;gap:8px}
+    aside .brand{margin:0 auto 0 0}
+    .nav{flex-direction:row;flex:0;flex-wrap:wrap}
+    .who{border:none;padding:0}
+    .grid2{grid-template-columns:1fr}
+    main{padding:18px}
+  }
+  @media print{ aside,.no-print{display:none!important} #appView{grid-template-columns:1fr} }
+</style>
+</head>
+<body>
+
+<!-- ==================== LOGIN / REGISTRO ==================== -->
+<div id="authView">
+  <div class="auth-card">
+    <div class="brand">
+      <div class="logo">✓</div>
+      <div>
+        <h1>Plataforma de Pruebas</h1>
+        <p class="auth-sub" id="authSub">Crea, distribuye y corrige sin Word.</p>
+      </div>
+    </div>
+
+    <!-- El fondo y la tarjeta no cambian: solo se reemplazan los campos -->
+    <div class="switch">
+      <button id="tabLogin" class="on" onclick="setAuthMode('login')">Iniciar sesión</button>
+      <button id="tabReg" onclick="setAuthMode('register')">Crear cuenta</button>
+    </div>
+
+    <div id="formLogin">
+      <div class="field"><label>Correo</label><input id="lEmail" type="email" placeholder="profesor@colegio.cl" /></div>
+      <div class="field"><label>Contraseña</label><input id="lPass" type="password" placeholder="••••••••" /></div>
+      <button class="btn cta" style="width:100%" id="btnLogin" onclick="login()">Entrar</button>
+    </div>
+
+    <div id="formReg" class="hidden">
+      <div class="field"><label>Nombre y apellido</label><input id="rNombre" placeholder="Ana Soto" /></div>
+      <div class="field"><label>Correo</label><input id="rEmail" type="email" placeholder="profesor@colegio.cl" /></div>
+      <div class="field"><label>Contraseña</label><input id="rPass" type="password" placeholder="Mínimo 8 caracteres" /></div>
+      <button class="btn cta" style="width:100%" id="btnReg" onclick="registrar()">Crear cuenta y entrar</button>
+    </div>
+
+    <p class="auth-msg" id="authMsg"></p>
+
+    <div class="api-line">
+      <span class="dot" id="dot"></span>
+      <span>API</span>
+      <input id="baseUrl" />
+    </div>
+  </div>
+</div>
+
+<!-- ==================== APLICACIÓN ==================== -->
+<div id="appView" class="hidden">
+  <aside class="no-print">
+    <div class="brand">
+      <div class="logo">✓</div>
+      <h1>Plataforma<br/>de Pruebas</h1>
+    </div>
+    <nav class="nav">
+      <button id="navCursos" class="on" onclick="go('cursos')"><span class="ic">🎓</span> Cursos y Alumnos</button>
+      <button id="navCrear" onclick="go('crear')"><span class="ic">📝</span> Crear Prueba</button>
+      <button id="navPasadas" onclick="go('pasadas')"><span class="ic">🗂️</span> Pruebas pasadas</button>
+    </nav>
+    <div class="who">
+      <b id="whoName">—</b>
+      <span id="whoMail"></span>
+      <button class="btn ghost mini" style="width:100%;margin-top:10px" onclick="logout()">Cerrar sesión</button>
+    </div>
+  </aside>
+
+  <main>
+    <!-- ---------- CURSOS Y ALUMNOS ---------- -->
+    <section id="viewCursos">
+      <div class="page-head">
+        <h2>Cursos y Alumnos</h2>
+        <p class="muted">Crea cursos, edítalos y carga a tus alumnos desde una planilla Excel.</p>
+      </div>
+
+      <div class="grid2">
+        <div class="card">
+          <h3>Mis cursos <span class="chip" id="cCount">0</span></h3>
+          <div class="in">
+            <div class="row" style="margin-bottom:12px">
+              <div class="f"><input id="newCourse" placeholder="1° Medio A" onkeydown="if(event.key==='Enter')crearCurso()" /></div>
+              <button class="btn" onclick="crearCurso()">Crear</button>
+            </div>
+            <div class="lst" id="courseList"></div>
+          </div>
+        </div>
+
+        <div>
+          <div class="card">
+            <h3>
+              <span id="stuTitle">Alumnos</span>
+              <button class="btn ghost mini" onclick="descargarPlantilla()">⬇ Descargar plantilla Excel</button>
+            </h3>
+            <div class="in">
+              <div id="stuEmpty" class="empty"><span class="big">🎓</span>Selecciona un curso para ver sus alumnos.</div>
+
+              <div id="stuPanel" class="hidden">
+                <!-- Carga Excel -->
+                <div class="drop" id="drop">
+                  <span class="big">📄</span>
+                  <b>Arrastra tu planilla Excel aquí</b>
+                  <p class="muted" style="margin:5px 0 10px">
+                    Tres columnas: <code class="mono">nombre</code> · <code class="mono">rut</code> · <code class="mono">curso</code>.
+                    Los cursos que no existan se crean solos.
+                  </p>
+                  <input type="file" id="xlsx" accept=".xlsx,.xlsm" class="hidden" />
+                  <button class="btn" onclick="document.getElementById('xlsx').click()">Elegir planilla</button>
+                </div>
+                <div id="importRes"></div>
+
+                <!-- Alta manual -->
+                <div class="row" style="margin:16px 0 12px">
+                  <div class="f"><input id="sNombre" placeholder="Nombre del alumno" /></div>
+                  <div class="f"><input id="sRut" placeholder="RUT / matrícula" onkeydown="if(event.key==='Enter')addStudent()" /></div>
+                  <button class="btn ghost" onclick="addStudent()">＋ Añadir alumno</button>
+                </div>
+
+                <table>
+                  <thead><tr><th>#</th><th>Nombre</th><th>RUT / matrícula</th><th style="width:130px"></th></tr></thead>
+                  <tbody id="stuBody"></tbody>
+                </table>
+                <div id="stuNone" class="empty hidden">Este curso aún no tiene alumnos.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- CREAR PRUEBA ---------- -->
+    <section id="viewCrear" class="hidden">
+      <div class="page-head">
+        <h2>Crear Prueba</h2>
+        <p class="muted">Arma la prueba por bloques, revisa la vista previa y genera un ejemplar por alumno.</p>
+      </div>
+
+      <!-- Paso 1: definir prueba -->
+      <div class="card" id="stepNew">
+        <h3>1 · Datos de la prueba</h3>
+        <div class="in">
+          <div class="row">
+            <div class="f" style="flex:2 1 240px"><label>Título</label><input id="tTitulo" placeholder="Prueba de Álgebra — Unidad 1" /></div>
+            <div class="f"><label>Curso</label><select id="tCurso"></select></div>
+            <div class="f" style="flex:2 1 240px"><label>Descripción (opcional)</label><input id="tDesc" placeholder="Funciones y derivadas" /></div>
+            <div style="display:flex;align-items:flex-end"><button class="btn" onclick="crearPrueba()">Comenzar prueba</button></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Paso 2: constructor -->
+      <div id="builder" class="hidden">
+        <div class="card">
+          <h3>
+            <span>2 · <b id="bTitulo"></b> <span class="chip" id="bCurso"></span></span>
+            <span>
+              <span class="chip" id="bPts">0 pts</span>
+              <button class="btn ghost mini" onclick="togglePreview()" id="btnPrev">👁 Vista previa</button>
+              <button class="btn ghost mini" onclick="cerrarPrueba()">Cerrar</button>
+            </span>
+          </h3>
+          <div class="in">
+            <div class="row">
+              <div class="f"><label>Tipo de pregunta</label>
+                <select id="qTipo" onchange="onTipo()">
+                  <option value="alternativa">Alternativas</option>
+                  <option value="desarrollo_corto">Desarrollo corto</option>
+                  <option value="desarrollo_largo">Desarrollo largo</option>
+                </select>
+              </div>
+              <div class="f" style="flex:0 1 110px"><label>Puntaje</label><input id="qPts" type="number" value="2" min="0" step="0.5" /></div>
+              <div class="f" style="flex:0 1 150px" id="wLineas"><label>Líneas en papel</label><input id="qLineas" type="number" value="6" min="0" /></div>
+            </div>
+
+            <div style="margin:16px 0 8px"><label>Enunciado (se muestra en este orden)</label>
+              <div class="row">
+                <button class="btn ghost mini" onclick="addBlk('text')">＋ Texto</button>
+                <button class="btn ghost mini" onclick="addBlk('latex')">＋ Fórmula</button>
+                <button class="btn ghost mini" onclick="addBlk('image')">＋ Imagen</button>
+              </div>
+            </div>
+            <div id="blks"></div>
+
+            <div id="altBox">
+              <label style="margin-top:14px">Alternativas (marca la correcta)</label>
+              <div id="opts"></div>
+              <button class="btn ghost mini" onclick="addOpt()">＋ Agregar alternativa</button>
+            </div>
+
+            <div style="margin-top:16px;display:flex;gap:8px;align-items:center">
+              <button class="btn" onclick="guardarPregunta()">Agregar pregunta</button>
+              <button class="btn ghost" onclick="limpiarBorrador()">Limpiar</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Preguntas de la prueba <span class="chip" id="qCount">0</span></h3>
+          <div class="in">
+            <div id="qList"></div>
+            <div id="qNone" class="empty"><span class="big">📝</span>Aún no agregas preguntas.</div>
+          </div>
+        </div>
+
+        <div class="card" id="prevCard" style="display:none">
+          <h3>Vista previa <span class="muted" style="font-weight:400">Así se imprimirá cada hoja</span></h3>
+          <div class="in"><div id="paper"></div></div>
+        </div>
+
+        <div class="card">
+          <h3>3 · Generar prueba</h3>
+          <div class="in">
+            <p class="muted" style="margin:0 0 12px">
+              Se crea un ejemplar único por cada alumno del curso, con su código para el QR.
+              Puedes volver a generar si añades alumnos: los ejemplares existentes conservan su código.
+            </p>
+            <button class="btn cta" onclick="generar()">⚡ Generar prueba para el curso</button>
+            <div id="genRes"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- PRUEBAS PASADAS ---------- -->
+    <section id="viewPasadas" class="hidden">
+      <div class="page-head">
+        <h2>Pruebas pasadas</h2>
+        <p class="muted">Historial de pruebas creadas. Ábrelas para revisarlas o seguir editándolas.</p>
+      </div>
+      <div class="card">
+        <h3>Historial <button class="btn ghost mini" onclick="cargarPasadas()">↻ Actualizar</button></h3>
+        <div class="in">
+          <table>
+            <thead><tr><th>Prueba</th><th>Curso</th><th>Creada</th><th>Preguntas</th><th>Puntaje</th><th>Generadas</th><th style="width:190px"></th></tr></thead>
+            <tbody id="pastBody"></tbody>
+          </table>
+          <div id="pastNone" class="empty hidden"><span class="big">🗂️</span>Todavía no has creado pruebas.</div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div id="toasts"></div>
+<div id="modalHost"></div>
+
+<script>
+/* =========================================================================
+   Estado + utilidades
+   ========================================================================= */
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+const mem = {};
+const store = {
+  get:k=>{try{return localStorage.getItem(k)}catch{return mem[k]??null}},
+  set:(k,v)=>{try{localStorage.setItem(k,v)}catch{mem[k]=v}},
+  del:k=>{try{localStorage.removeItem(k)}catch{delete mem[k]}}
+};
+
+const S = {
+  token: store.get('token'),
+  teacher: JSON.parse(store.get('teacher') || 'null'),
+  courses: [],
+  courseId: null,
+  test: null,          // prueba en edición
+  questions: [],
+  blocks: [],          // borrador de bloques
+  options: [],         // borrador de alternativas
+  preview: false,
+};
+
+const defBase = location.protocol.startsWith('http') ? location.origin : 'http://localhost:8000';
+$('#baseUrl').value = store.get('baseUrl') || defBase;
+const base = () => { const b = $('#baseUrl').value.trim().replace(/\/$/,''); store.set('baseUrl', b); return b; };
+
+function toast(msg, kind='ok'){
+  const t = document.createElement('div');
+  t.className = 'toast ' + kind; t.textContent = msg;
+  $('#toasts').appendChild(t);
+  setTimeout(()=>t.remove(), 4200);
+}
+function setDot(v){ $('#dot').className = 'dot ' + v; }
+
+/* Cliente HTTP: añade el JWT y normaliza los errores del backend. */
+async function api(path, {method='GET', json=null, form=null, multipart=null, raw=false, auth=true}={}){
+  const headers = {}; let body = null;
+  if(json){ headers['Content-Type']='application/json'; body=JSON.stringify(json); }
+  else if(form){ headers['Content-Type']='application/x-www-form-urlencoded'; body=new URLSearchParams(form).toString(); }
+  else if(multipart){ body = multipart; }
+  if(auth && S.token) headers['Authorization'] = 'Bearer ' + S.token;
+
+  let res;
+  try{ res = await fetch(base()+path, {method, headers, body}); }
+  catch(e){ setDot('off'); throw new Error('Sin conexión con la API. ¿Está corriendo uvicorn?'); }
+  setDot('on');
+
+  if(res.status === 401 && S.token){ logout(); throw new Error('Tu sesión expiró. Entra de nuevo.'); }
+  if(raw){ if(!res.ok) throw new Error('Error '+res.status); return await res.blob(); }
+
+  const txt = await res.text();
+  let data = null; try{ data = txt ? JSON.parse(txt) : null; }catch{ data = txt; }
+  if(!res.ok){
+    let d = data && data.detail;
+    if(Array.isArray(d)) d = d.map(x=>x.msg || JSON.stringify(x)).join(' · ');
+    throw new Error(d || ('Error ' + res.status));
+  }
+  return data;
+}
+
+/* Render LaTeX con KaTeX; si falla, muestra el código crudo. */
+function tex(el, s, display=false){
+  if(window.katex){ try{ katex.render(s||'', el, {throwOnError:false, displayMode:display}); return; }catch{} }
+  el.textContent = s ? '$'+s+'$' : '';
+}
+
+function confirmar(titulo, texto, onOk, okLabel='Eliminar'){
+  const host = $('#modalHost');
+  host.innerHTML = `<div class="modal"><div class="box" style="max-width:420px">
+    <h3>${esc(titulo)}</h3><div class="mi"><p style="margin:0">${esc(texto)}</p></div>
+    <div class="mf"><button class="btn ghost" id="mNo">Cancelar</button>
+    <button class="btn danger" id="mYes">${esc(okLabel)}</button></div></div></div>`;
+  $('#mNo').onclick = ()=> host.innerHTML='';
+  $('#mYes').onclick = ()=>{ host.innerHTML=''; onOk(); };
+}
+
+/* =========================================================================
+   Autenticación
+   ========================================================================= */
+function setAuthMode(mode){
+  const login = mode === 'login';
+  $('#tabLogin').classList.toggle('on', login);
+  $('#tabReg').classList.toggle('on', !login);
+  $('#formLogin').classList.toggle('hidden', !login);
+  $('#formReg').classList.toggle('hidden', login);
+  $('#authSub').textContent = login ? 'Crea, distribuye y corrige sin Word.' : 'Una cuenta por profesor. Tus cursos y pruebas son solo tuyos.';
+  $('#authMsg').className = 'auth-msg';
+}
+function authMsg(text, kind='err'){ const m = $('#authMsg'); m.className = 'auth-msg ' + kind; m.textContent = text; }
+
+async function registrar(){
+  const b = $('#btnReg'); b.disabled = true;
+  try{
+    const nombre = $('#rNombre').value.trim(), email = $('#rEmail').value.trim(), password = $('#rPass').value;
+    if(nombre.length < 2) throw new Error('Escribe tu nombre completo.');
+    if(password.length < 8) throw new Error('La contraseña necesita al menos 8 caracteres.');
+    await api('/auth/register', {method:'POST', json:{nombre, email, password}, auth:false});
+    await doLogin(email, password, nombre);
+  }catch(e){ authMsg(e.message); }
+  b.disabled = false;
+}
+
+async function login(){
+  const b = $('#btnLogin'); b.disabled = true;
+  try{ await doLogin($('#lEmail').value.trim(), $('#lPass').value); }
+  catch(e){ authMsg(e.message); }
+  b.disabled = false;
+}
+
+async function doLogin(email, password, nombre){
+  const d = await api('/auth/login', {method:'POST', form:{username:email, password}, auth:false});
+  S.token = d.access_token; store.set('token', S.token);
+  S.teacher = {email, nombre: nombre || email.split('@')[0]};
+  store.set('teacher', JSON.stringify(S.teacher));
+  authMsg('¡Listo! Entrando…', 'ok');
+  mount();
+}
+
+function logout(){
+  S.token = null; S.teacher = null; S.courseId = null; S.test = null;
+  store.del('token'); store.del('teacher');
+  $('#appView').classList.add('hidden');
+  $('#authView').classList.remove('hidden');
+  setAuthMode('login');
+  $('#lPass').value = '';
+}
+
+async function mount(){
+  $('#authView').classList.add('hidden');
+  $('#appView').classList.remove('hidden');
+  $('#whoName').textContent = S.teacher?.nombre || 'Profesor';
+  $('#whoMail').textContent = S.teacher?.email || '';
+  await cargarCursos();
+  go('cursos');
+}
+
+/* =========================================================================
+   Navegación
+   ========================================================================= */
+function go(view){
+  ['cursos','crear','pasadas'].forEach(v=>{
+    $('#view' + v[0].toUpperCase() + v.slice(1)).classList.toggle('hidden', v !== view);
+    $('#nav' + v[0].toUpperCase() + v.slice(1)).classList.toggle('on', v === view);
+  });
+  if(view === 'crear') llenarSelectCursos();
+  if(view === 'pasadas') cargarPasadas();
+}
+
+/* =========================================================================
+   CURSOS Y ALUMNOS
+   ========================================================================= */
+async function cargarCursos(){
+  try{
+    S.courses = await api('/courses/');
+    $('#cCount').textContent = S.courses.length;
+    const box = $('#courseList');
+    if(!S.courses.length){
+      box.innerHTML = `<div class="empty"><span class="big">📚</span>Crea tu primer curso o cárgalo desde la planilla.</div>`;
+    }else{
+      box.innerHTML = '';
+      S.courses.forEach(c=>{
+        const d = document.createElement('div');
+        d.className = 'it' + (c.id === S.courseId ? ' on' : '');
+        d.onclick = () => selCurso(c.id);
+        d.innerHTML = `<div><div class="nm">${esc(c.nombre)}</div>
+          <div class="sub">${c.students.length} alumno${c.students.length===1?'':'s'}</div></div>`;
+        const a = document.createElement('div'); a.className = 'acts';
+        const e = document.createElement('button'); e.className='btn ghost mini'; e.textContent='✎';
+        e.title='Renombrar'; e.onclick = ev => { ev.stopPropagation(); renombrar(c); };
+        const x = document.createElement('button'); x.className='btn danger mini'; x.textContent='🗑';
+        x.title='Eliminar'; x.onclick = ev => { ev.stopPropagation(); borrarCurso(c); };
+        a.append(e, x); d.appendChild(a); box.appendChild(d);
+      });
+    }
+    if(S.courseId && !S.courses.some(c=>c.id===S.courseId)) S.courseId = null;
+    pintarAlumnos();
+  }catch(e){ toast(e.message,'err'); }
+}
+
+async function crearCurso(){
+  const nombre = $('#newCourse').value.trim();
+  if(!nombre) return toast('Escribe el nombre del curso.','err');
+  try{
+    const c = await api('/courses/', {method:'POST', json:{nombre}});
+    $('#newCourse').value = '';
+    await cargarCursos(); selCurso(c.id);
+    toast('Curso creado: ' + c.nombre);
+  }catch(e){ toast(e.message,'err'); }
+}
+
+function renombrar(c){
+  const host = $('#modalHost');
+  host.innerHTML = `<div class="modal"><div class="box" style="max-width:420px">
+    <h3>Renombrar curso</h3><div class="mi"><label>Nombre</label>
+    <input id="rnInput" value="${esc(c.nombre)}" /></div>
+    <div class="mf"><button class="btn ghost" id="rnNo">Cancelar</button>
+    <button class="btn" id="rnOk">Guardar</button></div></div></div>`;
+  $('#rnInput').focus();
+  $('#rnNo').onclick = ()=> host.innerHTML = '';
+  $('#rnOk').onclick = async ()=>{
+    const nombre = $('#rnInput').value.trim(); if(!nombre) return;
+    host.innerHTML = '';
+    try{ await api('/courses/'+c.id, {method:'PATCH', json:{nombre}}); await cargarCursos(); toast('Curso renombrado.'); }
+    catch(e){ toast(e.message,'err'); }
+  };
+}
+
+function borrarCurso(c){
+  confirmar('Eliminar curso',
+    `Se eliminará "${c.nombre}" y todas sus pruebas. Los alumnos se conservan si están en otros cursos.`,
+    async ()=>{
+      try{ await api('/courses/'+c.id, {method:'DELETE'}); if(S.courseId===c.id) S.courseId=null;
+        await cargarCursos(); toast('Curso eliminado.'); }
+      catch(e){ toast(e.message,'err'); }
+    });
+}
+
+function selCurso(id){ S.courseId = id; cargarCursos(); }
+
+function cursoActual(){ return S.courses.find(c => c.id === S.courseId) || null; }
+
+function pintarAlumnos(){
+  const c = cursoActual();
+  $('#stuEmpty').classList.toggle('hidden', !!c);
+  $('#stuPanel').classList.toggle('hidden', !c);
+  if(!c) return;
+  $('#stuTitle').textContent = 'Alumnos de ' + c.nombre;
+  const body = $('#stuBody'); body.innerHTML = '';
+  $('#stuNone').classList.toggle('hidden', c.students.length > 0);
+  c.students.forEach((s,i)=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td class="muted">${i+1}</td><td>${esc(s.nombre)}</td><td><code class="mono">${esc(s.identificador)}</code></td>`;
+    const td = document.createElement('td');
+    const e = document.createElement('button'); e.className='btn ghost mini'; e.textContent='✎';
+    e.onclick = ()=> editarAlumno(s);
+    const x = document.createElement('button'); x.className='btn danger mini'; x.textContent='Quitar';
+    x.style.marginLeft='6px'; x.onclick = ()=> quitarAlumno(s);
+    td.append(e, x); tr.appendChild(td); body.appendChild(tr);
+  });
+}
+
+async function addStudent(){
+  const c = cursoActual(); if(!c) return;
+  const nombre = $('#sNombre').value.trim(), identificador = $('#sRut').value.trim();
+  if(!nombre || !identificador) return toast('Completa nombre y RUT.','err');
+  try{
+    await api(`/courses/${c.id}/students`, {method:'POST', json:{nombre, identificador}});
+    $('#sNombre').value=''; $('#sRut').value='';
+    await cargarCursos(); toast('Alumno añadido.');
+  }catch(e){ toast(e.message,'err'); }
+}
+
+function editarAlumno(s){
+  const host = $('#modalHost');
+  host.innerHTML = `<div class="modal"><div class="box" style="max-width:420px">
+    <h3>Editar alumno</h3><div class="mi">
+    <div class="field"><label>Nombre</label><input id="eN" value="${esc(s.nombre)}" /></div>
+    <div class="field"><label>RUT / matrícula</label><input id="eR" value="${esc(s.identificador)}" /></div></div>
+    <div class="mf"><button class="btn ghost" id="eNo">Cancelar</button><button class="btn" id="eOk">Guardar</button></div>
+  </div></div>`;
+  $('#eNo').onclick = ()=> host.innerHTML='';
+  $('#eOk').onclick = async ()=>{
+    const nombre = $('#eN').value.trim(), identificador = $('#eR').value.trim();
+    host.innerHTML='';
+    try{ await api('/courses/students/'+s.id, {method:'PATCH', json:{nombre, identificador}});
+      await cargarCursos(); toast('Alumno actualizado.'); }
+    catch(e){ toast(e.message,'err'); }
+  };
+}
+
+function quitarAlumno(s){
+  const c = cursoActual();
+  confirmar('Quitar alumno', `¿Quitar a ${s.nombre} de ${c.nombre}?`, async ()=>{
+    try{ await api(`/courses/${c.id}/students/${s.id}`, {method:'DELETE'}); await cargarCursos(); toast('Alumno quitado.'); }
+    catch(e){ toast(e.message,'err'); }
+  }, 'Quitar');
+}
+
+/* ---------- Planilla Excel ---------- */
+async function descargarPlantilla(){
+  try{
+    const blob = await api('/courses/import/template', {raw:true});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'plantilla_alumnos.xlsx';
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    toast('Plantilla descargada.');
+  }catch(e){ toast(e.message,'err'); }
+}
+
+const drop = $('#drop');
+['dragenter','dragover'].forEach(ev => drop?.addEventListener(ev, e=>{ e.preventDefault(); drop.classList.add('hot'); }));
+['dragleave','drop'].forEach(ev => drop?.addEventListener(ev, e=>{ e.preventDefault(); drop.classList.remove('hot'); }));
+drop?.addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if(f) subirPlanilla(f); });
+$('#xlsx')?.addEventListener('change', e => { const f = e.target.files[0]; if(f) subirPlanilla(f); e.target.value=''; });
+
+async function subirPlanilla(file){
+  if(!/\.(xlsx|xlsm)$/i.test(file.name)) return toast('El archivo debe ser .xlsx','err');
+  $('#importRes').innerHTML = '<p class="muted" style="margin-top:12px">Leyendo la planilla…</p>';
+  try{
+    const fd = new FormData(); fd.append('file', file);
+    const r = await api('/courses/import', {method:'POST', multipart:fd});
+    let html = `<div class="res"><div class="stats">
+      <div class="stat"><b>${r.filas_leidas}</b>filas leídas</div>
+      <div class="stat"><b>${r.alumnos_creados}</b>alumnos nuevos</div>
+      <div class="stat"><b>${r.matriculas_nuevas}</b>matrículas</div>
+      <div class="stat"><b>${r.alumnos_actualizados}</b>actualizados</div>
+      <div class="stat"><b>${r.cursos_creados.length}</b>cursos creados</div></div>`;
+    if(r.cursos_creados.length) html += `<p class="muted" style="margin:0 0 6px">Cursos creados: ${r.cursos_creados.map(esc).join(' · ')}</p>`;
+    if(r.errores.length){
+      html += `<p style="margin:8px 0 4px;font-size:13px;font-weight:600;color:var(--warn)">
+        ${r.errores.length} fila(s) no se cargaron:</p>`;
+      r.errores.forEach(e => html += `<div class="err-row">Fila ${e.fila}: ${esc(e.motivo)}</div>`);
+    }
+    html += '</div>';
+    $('#importRes').innerHTML = html;
+    await cargarCursos();
+    if(!S.courseId && S.courses.length) selCurso(S.courses[0].id);
+    toast(`Planilla cargada: ${r.alumnos_creados} alumnos nuevos.`);
+  }catch(e){
+    $('#importRes').innerHTML = `<div class="res" style="border-color:#f6cccc;background:#fef2f2">
+      <b style="color:var(--err)">No se pudo cargar</b><p class="muted" style="margin:6px 0 0">${esc(e.message)}</p></div>`;
+    toast(e.message,'err');
+  }
+}
+
+/* =========================================================================
+   CREAR PRUEBA
+   ========================================================================= */
+function llenarSelectCursos(){
+  const sel = $('#tCurso');
+  sel.innerHTML = S.courses.length
+    ? S.courses.map(c=>`<option value="${c.id}">${esc(c.nombre)} (${c.students.length})</option>`).join('')
+    : '<option value="">— Sin cursos: crea uno primero —</option>';
+  if(S.courseId) sel.value = S.courseId;
+}
+
+async function crearPrueba(){
+  const titulo = $('#tTitulo').value.trim(), course_id = parseInt($('#tCurso').value);
+  if(!titulo) return toast('Ponle un título a la prueba.','err');
+  if(!course_id) return toast('Crea un curso antes de armar una prueba.','err');
+  try{
+    S.test = await api('/tests/', {method:'POST', json:{titulo, descripcion:$('#tDesc').value.trim()||null, course_id}});
+    S.questions = [];
+    abrirBuilder();
+    toast('Prueba creada. Ahora agrega preguntas.');
+  }catch(e){ toast(e.message,'err'); }
+}
+
+async function abrirPrueba(id){
+  try{
+    const t = await api(`/tests/${id}/export`);
+    S.test = t; S.questions = t.questions || [];
+    go('crear'); abrirBuilder();
+  }catch(e){ toast(e.message,'err'); }
+}
+
+function abrirBuilder(){
+  const curso = S.courses.find(c=>c.id === S.test.course_id);
+  $('#stepNew').classList.add('hidden');
+  $('#builder').classList.remove('hidden');
+  $('#bTitulo').textContent = S.test.titulo;
+  $('#bCurso').textContent = curso ? `${curso.nombre} · ${curso.students.length} alumnos` : '—';
+  $('#genRes').innerHTML = '';
+  limpiarBorrador(); onTipo(); pintarPreguntas();
+}
+
+function cerrarPrueba(){
+  S.test = null; S.questions = [];
+  $('#builder').classList.add('hidden');
+  $('#stepNew').classList.remove('hidden');
+  $('#tTitulo').value=''; $('#tDesc').value='';
+}
+
+function onTipo(){
+  const alt = $('#qTipo').value === 'alternativa';
+  $('#altBox').classList.toggle('hidden', !alt);
+  $('#wLineas').style.visibility = alt ? 'hidden' : 'visible';
+  if(alt && !S.options.length){ addOpt(); addOpt(); }
+}
+
+/* ---------- Bloques ---------- */
+function addBlk(tipo){ S.blocks.push({tipo, contenido:''}); pintarBlks(); }
+function delBlk(i){ S.blocks.splice(i,1); pintarBlks(); }
+function moveBlk(i,d){
+  const j = i + d; if(j < 0 || j >= S.blocks.length) return;
+  [S.blocks[i], S.blocks[j]] = [S.blocks[j], S.blocks[i]]; pintarBlks();
+}
+
+function pintarBlks(){
+  const box = $('#blks'); box.innerHTML = '';
+  if(!S.blocks.length){ box.innerHTML = '<p class="muted" style="margin:0 0 8px">Agrega texto, una fórmula o una imagen.</p>'; return; }
+  S.blocks.forEach((b,i)=>{
+    const w = document.createElement('div'); w.className = 'blk';
+    const label = {text:'Texto', latex:'Fórmula LaTeX', image:'Imagen'}[b.tipo];
+    const h = document.createElement('div'); h.className = 'blk-h';
+    h.innerHTML = `<span class="chip">${label}</span>`;
+    const acts = document.createElement('div'); acts.className = 'acts';
+    const up = document.createElement('button'); up.className='btn ghost mini'; up.textContent='↑'; up.onclick=()=>moveBlk(i,-1);
+    const dn = document.createElement('button'); dn.className='btn ghost mini'; dn.textContent='↓'; dn.onclick=()=>moveBlk(i,1);
+    const rm = document.createElement('button'); rm.className='btn danger mini'; rm.textContent='✕'; rm.onclick=()=>delBlk(i);
+    acts.append(up,dn,rm); h.appendChild(acts); w.appendChild(h);
+
+    if(b.tipo === 'text'){
+      const ta = document.createElement('textarea');
+      ta.placeholder = 'Escribe el enunciado…'; ta.value = b.contenido;
+      ta.oninput = e => S.blocks[i].contenido = e.target.value;
+      w.appendChild(ta);
+    }
+    else if(b.tipo === 'latex'){
+      const inp = document.createElement('input');
+      inp.placeholder = 'Ej: \\frac{a}{b} + \\sqrt{x}'; inp.value = b.contenido;
+      const p = document.createElement('div'); p.className = 'prev';
+      const draw = () => tex(p, inp.value, true);
+      inp.oninput = e => { S.blocks[i].contenido = e.target.value; draw(); };
+      const hint = document.createElement('p'); hint.className='muted'; hint.style.margin='6px 2px 0';
+      hint.textContent = 'Se guarda como LaTeX puro (lo que entrega un editor tipo Symbolab).';
+      w.append(inp, hint, p); draw();
+    }
+    else {
+      const f = document.createElement('input'); f.type='file'; f.accept='image/*';
+      const btn = document.createElement('button'); btn.className='btn mini'; btn.textContent='Subir imagen';
+      btn.style.marginTop='7px';
+      const img = document.createElement('img'); img.className='thumb';
+      if(b.contenido){ img.src = b.contenido; } else { img.style.display='none'; }
+      btn.onclick = async ()=>{
+        if(!f.files[0]) return toast('Elige un archivo primero.','err');
+        btn.disabled = true; btn.textContent = 'Subiendo…';
+        try{
+          const fd = new FormData(); fd.append('file', f.files[0]);
+          const r = await api('/upload/image', {method:'POST', multipart:fd});
+          S.blocks[i].contenido = r.url; img.src = r.url; img.style.display = 'block';
+          toast('Imagen subida.');
+        }catch(e){ toast(e.message,'err'); }
+        btn.disabled = false; btn.textContent = 'Subir imagen';
+      };
+      w.append(f, btn, img);
+    }
+    box.appendChild(w);
+  });
+}
+
+/* ---------- Alternativas ---------- */
+function addOpt(){
+  S.options.push({id:String.fromCharCode(97+S.options.length), modo:'texto', valor:'', ok:false});
+  pintarOpts();
+}
+function delOpt(i){
+  S.options.splice(i,1);
+  S.options.forEach((o,k)=> o.id = String.fromCharCode(97+k));
+  pintarOpts();
+}
+function pintarOpts(){
+  const box = $('#opts'); box.innerHTML = '';
+  S.options.forEach((o,i)=>{
+    const r = document.createElement('div'); r.className = 'opt';
+    r.innerHTML = `<span class="chip ${o.ok?'on':''}">${o.id.toUpperCase()}</span>`;
+    const m = document.createElement('select');
+    m.innerHTML = '<option value="texto">Texto</option><option value="latex">Fórmula</option>';
+    m.value = o.modo; m.onchange = e => { S.options[i].modo = e.target.value; pintarOpts(); };
+    const v = document.createElement('input'); v.type='text'; v.value = o.valor;
+    v.placeholder = o.modo === 'latex' ? '2x' : 'Texto de la alternativa';
+    v.oninput = e => S.options[i].valor = e.target.value;
+    const l = document.createElement('label'); l.className = 'chk';
+    const ch = document.createElement('input'); ch.type='checkbox'; ch.checked = o.ok;
+    ch.onchange = e => { S.options[i].ok = e.target.checked; pintarOpts(); };
+    l.append(ch, document.createTextNode('correcta'));
+    const x = document.createElement('button'); x.className='btn danger mini'; x.textContent='✕'; x.onclick = ()=> delOpt(i);
+    r.append(m, v, l, x); box.appendChild(r);
+  });
+}
+
+function limpiarBorrador(){
+  S.blocks = []; S.options = [];
+  pintarBlks(); pintarOpts(); onTipo();
+}
+
+async function guardarPregunta(){
+  const tipo = $('#qTipo').value;
+  const blocks = S.blocks.filter(b => (b.contenido||'').trim())
+                         .map((b,i)=>({tipo:b.tipo, orden:i, contenido:b.contenido}));
+  if(!blocks.length) return toast('El enunciado está vacío: agrega al menos un bloque.','err');
+
+  const payload = {
+    tipo, orden:0,
+    puntaje: parseFloat($('#qPts').value || '1'),
+    lineas_desarrollo: tipo === 'alternativa' ? 0 : parseInt($('#qLineas').value || '0'),
+    blocks, configuracion_extra: null
+  };
+
+  if(tipo === 'alternativa'){
+    const opciones = S.options.filter(o => (o.valor||'').trim())
+      .map(o => o.modo === 'latex' ? {id:o.id, latex:o.valor} : {id:o.id, texto:o.valor});
+    const correcta = S.options.filter(o => o.ok && (o.valor||'').trim()).map(o => o.id);
+    if(opciones.length < 2) return toast('Agrega al menos 2 alternativas.','err');
+    if(!correcta.length) return toast('Marca cuál alternativa es la correcta.','err');
+    payload.configuracion_extra = {multiple: correcta.length > 1, opciones, correcta};
+  }
+
+  try{
+    const q = await api(`/tests/${S.test.id}/questions`, {method:'POST', json:payload});
+    S.questions.push(q);
+    limpiarBorrador(); pintarPreguntas();
+    toast('Pregunta agregada.');
+  }catch(e){ toast(e.message,'err'); }
+}
+
+function borrarPregunta(q){
+  confirmar('Eliminar pregunta', '¿Eliminar esta pregunta de la prueba?', async ()=>{
+    try{
+      await api(`/tests/${S.test.id}/questions/${q.id}`, {method:'DELETE'});
+      S.questions = S.questions.filter(x => x.id !== q.id);
+      pintarPreguntas(); toast('Pregunta eliminada.');
+    }catch(e){ toast(e.message,'err'); }
+  });
+}
+
+function resumenEnunciado(q){
+  const t = (q.blocks||[]).find(b => b.tipo === 'text');
+  if(t) return t.contenido.slice(0,90);
+  const l = (q.blocks||[]).find(b => b.tipo === 'latex');
+  if(l) return 'Fórmula: ' + l.contenido.slice(0,60);
+  return '(solo imagen)';
+}
+
+function pintarPreguntas(){
+  const box = $('#qList'); box.innerHTML = '';
+  $('#qCount').textContent = S.questions.length;
+  $('#qNone').classList.toggle('hidden', S.questions.length > 0);
+  const total = S.questions.reduce((a,q)=> a + q.puntaje, 0);
+  $('#bPts').textContent = total + ' pts';
+
+  S.questions.forEach((q,i)=>{
+    const d = document.createElement('div'); d.className = 'q-item';
+    const h = document.createElement('div'); h.className = 'q-h';
+    const izq = document.createElement('div');
+    const nAlt = q.configuracion_extra?.opciones?.length || 0;
+    izq.innerHTML = `<div class="nm">${i+1}. ${esc(resumenEnunciado(q))}</div>
+      <div class="sub">
+        <span class="chip">${q.tipo.replace('_',' ')}</span>
+        <span class="chip">${q.puntaje} pts</span>
+        ${nAlt ? `<span class="chip">${nAlt} alternativas</span>` : ''}
+        ${q.lineas_desarrollo ? `<span class="chip">${q.lineas_desarrollo} líneas</span>` : ''}
+      </div>`;
+    const x = document.createElement('button'); x.className='btn danger mini'; x.textContent='Eliminar';
+    x.onclick = ()=> borrarPregunta(q);
+    h.append(izq, x); d.appendChild(h); box.appendChild(d);
+  });
+  if(S.preview) pintarPapel();
+}
+
+/* ---------- Vista previa ---------- */
+function togglePreview(){
+  S.preview = !S.preview;
+  $('#prevCard').style.display = S.preview ? '' : 'none';
+  $('#btnPrev').textContent = S.preview ? '👁 Ocultar vista previa' : '👁 Vista previa';
+  if(S.preview){ pintarPapel(); $('#prevCard').scrollIntoView({behavior:'smooth', block:'nearest'}); }
+}
+
+function pintarPapel(){
+  const curso = S.courses.find(c => c.id === S.test.course_id);
+  const p = $('#paper'); p.className = 'paper'; p.innerHTML = '';
+
+  // Encabezado rígido + anclas + QR (así se imprimirá — Módulo 3)
+  const top = document.createElement('div'); top.className = 'paper-top';
+  top.innerHTML = `<div class="anchor"></div>
+    <div class="qr-box">QR<br/>por<br/>alumno</div>
+    <div class="anchor"></div>`;
+  p.appendChild(top);
+
+  const h = document.createElement('div'); h.className = 'paper-h';
+  h.innerHTML = `
+    <div class="fld"><span>Alumno:</span> _______________________</div>
+    <div class="fld"><span>Curso:</span> ${esc(curso?.nombre || '—')}</div>
+    <div class="fld"><span>Profesor:</span> ${esc(S.teacher?.nombre || '')}</div>
+    <div class="fld"><span>Fecha:</span> ____ / ____ / ______</div>`;
+  p.appendChild(h);
+
+  const t = document.createElement('div');
+  t.innerHTML = `<h3 style="margin:0 0 3px;color:var(--azul-tinta)">${esc(S.test.titulo)}</h3>
+    <p class="muted" style="margin:0 0 20px">${esc(S.test.descripcion || '')}
+    ${S.questions.length ? ' · ' + S.questions.reduce((a,q)=>a+q.puntaje,0) + ' puntos totales' : ''}</p>`;
+  p.appendChild(t);
+
+  if(!S.questions.length){
+    p.insertAdjacentHTML('beforeend', '<p class="empty">Agrega preguntas para verlas aquí.</p>');
+    return;
+  }
+
+  S.questions.forEach((q,i)=>{
+    const d = document.createElement('div'); d.className = 'qq';
+    d.innerHTML = `<h4>${i+1}. <span class="chip">${q.puntaje} pts</span></h4>`;
+    (q.blocks||[]).forEach(b=>{
+      if(b.tipo === 'text'){ const el = document.createElement('p'); el.style.margin='6px 0'; el.textContent = b.contenido; d.appendChild(el); }
+      else if(b.tipo === 'latex'){ const el = document.createElement('div'); el.style.margin='6px 0'; tex(el, b.contenido, true); d.appendChild(el); }
+      else { const im = document.createElement('img'); im.src = b.contenido; im.className='thumb'; im.style.maxHeight='170px'; d.appendChild(im); }
+    });
+
+    if(q.tipo === 'alternativa' && q.configuracion_extra){
+      (q.configuracion_extra.opciones || []).forEach(o=>{
+        const ok = (q.configuracion_extra.correcta || []).includes(o.id);
+        const r = document.createElement('div');
+        r.style.cssText = 'display:flex;gap:8px;align-items:center;margin:5px 0';
+        r.innerHTML = `<span style="width:15px;height:15px;border:1.5px solid var(--azul-tinta);border-radius:50%;display:inline-block"></span>
+                       <b style="font-size:13px">${o.id.toUpperCase()})</b>`;
+        const c = document.createElement('span');
+        if(o.latex) tex(c, o.latex); else c.textContent = o.texto || '';
+        r.appendChild(c);
+        if(ok){ const k = document.createElement('span'); k.className='chip ok no-print'; k.textContent='correcta'; r.appendChild(k); }
+        d.appendChild(r);
+      });
+    }else{
+      for(let k=0; k < (q.lineas_desarrollo||0); k++){
+        const l = document.createElement('div'); l.className='line'; d.appendChild(l);
+      }
+    }
+    p.appendChild(d);
+  });
+}
+
+/* ---------- Generar prueba ---------- */
+async function generar(){
+  if(!S.test) return;
+  $('#genRes').innerHTML = '<p class="muted" style="margin-top:12px">Generando…</p>';
+  try{
+    const r = await api(`/tests/${S.test.id}/generate`, {method:'POST'});
+    let html = `<div class="res"><div class="stats">
+      <div class="stat"><b>${r.total_alumnos}</b>alumnos en ${esc(r.curso)}</div>
+      <div class="stat"><b>${r.nuevas}</b>pruebas nuevas</div>
+      <div class="stat"><b>${r.existentes}</b>ya existían</div></div>
+      <table><thead><tr><th>#</th><th>Alumno</th><th>RUT</th><th>Código del ejemplar (QR)</th></tr></thead><tbody>`;
+    r.assignments.forEach((a,i)=>{
+      html += `<tr><td class="muted">${i+1}</td><td>${esc(a.student_nombre)}</td>
+               <td><code class="mono">${esc(a.student_identificador)}</code></td>
+               <td><code class="mono">${esc(a.codigo)}</code></td></tr>`;
+    });
+    html += `</tbody></table><p class="muted" style="margin:10px 0 0">
+      Cada código identifica prueba + alumno y viajará dentro del QR de cada hoja impresa (Módulo 3),
+      para que el escáner sepa a quién corrige (Módulos 4 y 5).</p></div>`;
+    $('#genRes').innerHTML = html;
+    toast(`${r.nuevas} prueba(s) generada(s) para ${r.curso}.`);
+  }catch(e){
+    $('#genRes').innerHTML = `<div class="res" style="border-color:#f6cccc;background:#fef2f2">
+      <b style="color:var(--err)">No se pudo generar</b><p class="muted" style="margin:6px 0 0">${esc(e.message)}</p></div>`;
+    toast(e.message,'err');
+  }
+}
+
+/* =========================================================================
+   PRUEBAS PASADAS
+   ========================================================================= */
+async function cargarPasadas(){
+  try{
+    const list = await api('/tests/');
+    const body = $('#pastBody'); body.innerHTML = '';
+    $('#pastNone').classList.toggle('hidden', list.length > 0);
+    list.forEach(t=>{
+      const tr = document.createElement('tr');
+      const f = new Date(t.fecha_creacion).toLocaleDateString('es-CL', {day:'2-digit', month:'short', year:'numeric'});
+      tr.innerHTML = `<td><b>${esc(t.titulo)}</b><div class="sub muted">${esc(t.descripcion||'')}</div></td>
+        <td>${esc(t.course_nombre)}</td><td class="muted">${f}</td>
+        <td>${t.n_preguntas}</td><td>${t.puntaje_total} pts</td>
+        <td>${t.n_generadas ? `<span class="chip ok">${t.n_generadas}</span>` : '<span class="muted">—</span>'}</td>`;
+      const td = document.createElement('td');
+      const v = document.createElement('button'); v.className='btn ghost mini'; v.textContent='Abrir';
+      v.onclick = ()=> abrirPrueba(t.id);
+      const g = document.createElement('button'); g.className='btn ghost mini'; g.textContent='Ejemplares';
+      g.style.margin='0 6px'; g.onclick = ()=> verEjemplares(t);
+      const x = document.createElement('button'); x.className='btn danger mini'; x.textContent='🗑';
+      x.onclick = ()=> borrarPrueba(t);
+      td.append(v, g, x); tr.appendChild(td); body.appendChild(tr);
+    });
+  }catch(e){ toast(e.message,'err'); }
+}
+
+async function verEjemplares(t){
+  try{
+    const list = await api(`/tests/${t.id}/assignments`);
+    let inner = list.length
+      ? `<table><thead><tr><th>#</th><th>Alumno</th><th>RUT</th><th>Código (QR)</th></tr></thead><tbody>` +
+        list.map((a,i)=>`<tr><td class="muted">${i+1}</td><td>${esc(a.student_nombre)}</td>
+          <td><code class="mono">${esc(a.student_identificador)}</code></td>
+          <td><code class="mono">${esc(a.codigo)}</code></td></tr>`).join('') + '</tbody></table>'
+      : '<div class="empty">Esta prueba todavía no se ha generado para ningún alumno.</div>';
+    $('#modalHost').innerHTML = `<div class="modal"><div class="box">
+      <h3>Ejemplares · ${esc(t.titulo)}</h3><div class="mi">${inner}</div>
+      <div class="mf"><button class="btn ghost" onclick="document.getElementById('modalHost').innerHTML=''">Cerrar</button></div>
+    </div></div>`;
+  }catch(e){ toast(e.message,'err'); }
+}
+
+function borrarPrueba(t){
+  confirmar('Eliminar prueba',
+    `Se eliminará "${t.titulo}" con sus ${t.n_preguntas} pregunta(s) y ${t.n_generadas} ejemplar(es) generado(s).`,
+    async ()=>{
+      try{
+        await api('/tests/'+t.id, {method:'DELETE'});
+        if(S.test?.id === t.id) cerrarPrueba();
+        cargarPasadas(); toast('Prueba eliminada.');
+      }catch(e){ toast(e.message,'err'); }
+    });
+}
+
+/* =========================================================================
+   Arranque
+   ========================================================================= */
+(async function init(){
+  try{ await api('/health', {auth:false}); }catch{}
+  if(S.token){ mount(); } else { setAuthMode('login'); }
+})();
+</script>
+</body>
+</html>

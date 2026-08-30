@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Mando</title>
+<style>
+  :root {
+    --bg: #0E1633;
+    --panel: #182150;
+    --edge: #2C3873;
+    --ink: #E6EAF7;
+    --muted: #8B96C4;
+    --relay: #FFB020;
+    --direct: #3FE0C8;
+    --bad: #FF6B7A;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0; height: 100%; overflow: hidden;
+    background: var(--bg); color: var(--ink);
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    -webkit-user-select: none; user-select: none;
+    touch-action: none;
+  }
+  body {
+    padding: env(safe-area-inset-top) 16px env(safe-area-inset-bottom);
+    display: flex; flex-direction: column;
+  }
+  .screen { display: none; flex: 1; flex-direction: column; }
+  .screen.on { display: flex; }
+
+  /* ---------- Entrada del código ---------- */
+  #join { justify-content: center; text-align: center; }
+  #join h1 { font-size: 24px; font-weight: 700; margin: 0 0 8px; }
+  #join p { color: var(--muted); font-size: 15px; line-height: 1.5; margin: 0 0 28px; }
+  #codeIn {
+    width: 100%; padding: 18px; font-size: 40px; font-weight: 700;
+    font-family: "Courier New", monospace; text-align: center;
+    letter-spacing: 0.2em; text-transform: uppercase;
+    background: var(--panel); color: var(--ink);
+    border: 2px solid var(--edge); border-radius: 12px;
+  }
+  #codeIn:focus { outline: none; border-color: var(--direct); }
+  button {
+    width: 100%; margin-top: 14px; padding: 18px;
+    font-size: 17px; font-weight: 700; font-family: inherit;
+    background: var(--direct); color: #06231F;
+    border: 0; border-radius: 12px;
+  }
+  button.ghost { background: transparent; color: var(--ink); border: 2px solid var(--edge); }
+  #err { color: var(--bad); font-size: 15px; margin-top: 14px; min-height: 20px; }
+
+  /* ---------- Mando ---------- */
+  #pad {
+    flex: 1; margin: 10px 0; border-radius: 14px;
+    background: var(--panel); border: 2px solid var(--edge);
+    position: relative;
+  }
+  #dot {
+    position: absolute; width: 62px; height: 62px; margin: -31px 0 0 -31px;
+    border-radius: 50%; background: var(--direct);
+  }
+  #padHint {
+    position: absolute; left: 0; right: 0; top: 50%; margin-top: -22px;
+    text-align: center; color: var(--muted); font-size: 15px; line-height: 1.4;
+  }
+  .stats { display: flex; margin-bottom: 10px; }
+  .stat { flex: 1; background: var(--panel); border: 2px solid var(--edge); border-radius: 12px; padding: 10px 12px; }
+  .stat + .stat { margin-left: 8px; }
+  .stat.relay { border-left: 6px solid var(--relay); }
+  .stat.direct { border-left: 6px solid var(--direct); }
+  .stat .k { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  .stat .v { font-family: "Courier New", monospace; font-size: 30px; font-weight: 700; line-height: 1; }
+  .stat .v small { font-size: 13px; color: var(--muted); }
+  .stat .d { font-family: "Courier New", monospace; font-size: 12px; color: var(--muted); margin-top: 5px; }
+  .stat .d.off { color: var(--bad); }
+</style>
+</head>
+<body>
+
+<div id="join" class="screen on">
+  <h1>Mando de prueba</h1>
+  <p>Escribe el código que aparece en el televisor.</p>
+  <input id="codeIn" maxlength="4" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" inputmode="text">
+  <button id="go">Conectar</button>
+  <div id="err"></div>
+</div>
+
+<div id="play" class="screen">
+  <div class="stats">
+    <div class="stat relay">
+      <div class="k">Por el servidor</div>
+      <div class="v"><span id="wsP50">—</span><small> ms</small></div>
+      <div class="d" id="wsMore">midiendo</div>
+    </div>
+    <div class="stat direct">
+      <div class="k">Directo</div>
+      <div class="v"><span id="rtcP50">—</span><small> ms</small></div>
+      <div class="d" id="rtcMore">conectando</div>
+    </div>
+  </div>
+  <div id="pad">
+    <div id="padHint">Arrastra el dedo aquí.<br>Mira el televisor, no el celular.</div>
+    <div id="dot" style="display:none"></div>
+  </div>
+  <button id="motion" class="ghost">Activar sensor de movimiento</button>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var el = function (id) { return document.getElementById(id); };
+  var proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
+  var ws = null, pc = null, dc = null;
+
+  var input = { x: 0.5, y: 0.5, gx: 0, gy: 0 };
+  var seq = { ws: 0, rtc: 0 };
+  var pending = { ws: {}, rtc: {} };
+  var samples = { ws: [], rtc: [] };
+  var lost = { ws: 0, rtc: 0 };
+  var sent = { ws: 0, rtc: 0 };
+
+  // -------------------------------------------------------------------------
+  // Conexión
+  // -------------------------------------------------------------------------
+  var params = new URLSearchParams(location.search);
+  if (params.get('c')) el('codeIn').value = params.get('c').toUpperCase();
+
+  el('go').addEventListener('click', connect);
+  el('codeIn').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') connect();
+  });
+
+  function connect() {
+    var code = el('codeIn').value.toUpperCase().trim();
+    if (code.length !== 4) { el('err').textContent = 'El código tiene 4 letras.'; return; }
+    el('err').textContent = 'Conectando…';
+
+    ws = new WebSocket(proto + location.host);
+    ws.onopen = function () { ws.send(JSON.stringify({ t: 'join', code: code })); };
+
+    ws.onmessage = function (ev) {
+      var text = ev.data;
+      if (text.lastIndexOf('{"t":"r"', 0) === 0) { ack('ws', JSON.parse(text).s); return; }
+
+      var msg = JSON.parse(text);
+      if (msg.t === 'error') {
+        el('err').textContent = msg.reason === 'nocode'
+          ? 'Ese código no existe. Revisa el televisor.'
+          : 'Ya hay un mando conectado a esa sala.';
+        ws.close();
+        return;
+      }
+      if (msg.t === 'peer') { el('join').className = 'screen'; el('play').className = 'screen on'; startRTC(); return; }
+      if (msg.t === 'gone') { el('rtcMore').textContent = 'el televisor se desconectó'; return; }
+      if (msg.t === 'signal') { onSignal(msg.data); return; }
+    };
+
+    ws.onerror = function () { el('err').textContent = 'No se pudo conectar al servidor.'; };
+  }
+
+  // -------------------------------------------------------------------------
+  // WebRTC. El celular ofrece; su navegador es el más moderno de los dos.
+  // Canal no ordenado y sin reintentos: un input viejo no sirve de nada.
+  // -------------------------------------------------------------------------
+  function startRTC() {
+    if (typeof RTCPeerConnection === 'undefined') {
+      el('rtcMore').className = 'd off';
+      el('rtcMore').textContent = 'sin WebRTC';
+      return;
+    }
+    pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+
+    pc.onicecandidate = function (e) {
+      if (e.candidate) ws.send(JSON.stringify({ t: 'signal', data: { ice: e.candidate } }));
+    };
+    pc.oniceconnectionstatechange = function () {
+      var s = pc.iceConnectionState;
+      if (s === 'failed' || s === 'disconnected') {
+        el('rtcMore').className = 'd off';
+        el('rtcMore').textContent = 'no hubo conexión directa';
+      }
+    };
+
+    dc = pc.createDataChannel('input', { ordered: false, maxRetransmits: 0 });
+    dc.onopen = function () { el('rtcMore').className = 'd'; el('rtcMore').textContent = 'midiendo'; };
+    dc.onmessage = function (ev) { ack('rtc', JSON.parse(ev.data).s); };
+
+    pc.createOffer()
+      .then(function (offer) { return pc.setLocalDescription(offer); })
+      .then(function () {
+        ws.send(JSON.stringify({ t: 'signal', data: { sdp: pc.localDescription } }));
+      })
+      .catch(function (err) {
+        el('rtcMore').className = 'd off';
+        el('rtcMore').textContent = err.message;
+      });
+  }
+
+  function onSignal(data) {
+    if (!pc) return;
+    if (data.sdp) {
+      pc.setRemoteDescription(new RTCSessionDescription(data.sdp)).catch(function () {});
+    } else if (data.ice) {
+      pc.addIceCandidate(new RTCIceCandidate(data.ice)).catch(function () {});
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Envío a 60 Hz por las dos rutas en paralelo
+  // -------------------------------------------------------------------------
+  function payload(channel) {
+    var s = ++seq[channel];
+    pending[channel][s] = performance.now();
+    sent[channel]++;
+    return { s: s, x: round(input.x), y: round(input.y), gx: round(input.gx), gy: round(input.gy) };
+  }
+
+  function round(n) { return Math.round(n * 1000) / 1000; }
+
+  function ack(channel, s) {
+    var t0 = pending[channel][s];
+    if (t0 === undefined) return;
+    delete pending[channel][s];
+    var arr = samples[channel];
+    arr.push(performance.now() - t0);
+    if (arr.length > 240) arr.shift();
+  }
+
+  setInterval(function () {
+    if (ws && ws.readyState === 1) {
+      var p = payload('ws');
+      ws.send('{"t":"r","s":' + p.s + ',"x":' + p.x + ',"y":' + p.y + ',"gx":' + p.gx + ',"gy":' + p.gy + '}');
+    }
+    if (dc && dc.readyState === 'open') {
+      var q = payload('rtc');
+      dc.send(JSON.stringify(q));
+    }
+  }, 16);
+
+  // Lo que no volvió en 1,5 s se cuenta como perdido.
+  setInterval(function () {
+    var now = performance.now();
+    ['ws', 'rtc'].forEach(function (ch) {
+      for (var k in pending[ch]) {
+        if (now - pending[ch][k] > 1500) { delete pending[ch][k]; lost[ch]++; }
+      }
+    });
+  }, 1000);
+
+  // -------------------------------------------------------------------------
+  // Estadísticas. La mediana dice cómo se siente; p95 y máximo dicen si tiembla.
+  // -------------------------------------------------------------------------
+  function pct(arr, p) {
+    if (!arr.length) return null;
+    var s = arr.slice().sort(function (a, b) { return a - b; });
+    return s[Math.min(s.length - 1, Math.floor(s.length * p))];
+  }
+
+  function refresh() {
+    var out = {};
+    ['ws', 'rtc'].forEach(function (ch) {
+      var arr = samples[ch];
+      var p50 = pct(arr, 0.5), p95 = pct(arr, 0.95);
+      var max = arr.length ? Math.max.apply(null, arr) : null;
+      var lossPct = sent[ch] ? (lost[ch] / sent[ch] * 100) : 0;
+      out[ch + 'P50'] = p50 === null ? '—' : Math.round(p50);
+      out[ch + 'More'] = p50 === null ? 'midiendo'
+        : 'p95 ' + Math.round(p95) + ' · máx ' + Math.round(max) + ' · perdidos ' + lossPct.toFixed(1) + '%';
+    });
+
+    el('wsP50').textContent = out.wsP50;
+    el('rtcP50').textContent = out.rtcP50;
+    el('wsMore').textContent = out.wsMore;
+    if (el('rtcMore').className.indexOf('off') === -1) el('rtcMore').textContent = out.rtcMore;
+
+    if (ws && ws.readyState === 1) {
+      ws.send(JSON.stringify({ t: 'signal', data: { stats: {
+        wsP50: out.wsP50, wsMore: out.wsMore,
+        rtcP50: out.rtcP50, rtcMore: out.rtcMore
+      } } }));
+    }
+  }
+  setInterval(refresh, 500);
+
+  // -------------------------------------------------------------------------
+  // Táctil
+  // -------------------------------------------------------------------------
+  var pad = el('pad'), dot = el('dot'), hint = el('padHint');
+
+  function track(e) {
+    e.preventDefault();
+    var t = e.touches ? e.touches[0] : e;
+    var r = pad.getBoundingClientRect();
+    input.x = Math.min(1, Math.max(0, (t.clientX - r.left) / r.width));
+    input.y = Math.min(1, Math.max(0, (t.clientY - r.top) / r.height));
+    dot.style.display = 'block';
+    dot.style.left = (input.x * r.width) + 'px';
+    dot.style.top = (input.y * r.height) + 'px';
+    hint.style.display = 'none';
+  }
+
+  pad.addEventListener('touchstart', track, { passive: false });
+  pad.addEventListener('touchmove', track, { passive: false });
+  pad.addEventListener('mousedown', track);
+  pad.addEventListener('mousemove', function (e) { if (e.buttons) track(e); });
+
+  // -------------------------------------------------------------------------
+  // Movimiento. Safari exige pedir permiso desde un gesto del usuario.
+  // -------------------------------------------------------------------------
+  function listenTilt() {
+    window.addEventListener('deviceorientation', function (e) {
+      if (e.gamma === null) return;
+      input.gx = Math.max(-1, Math.min(1, e.gamma / 45));
+      input.gy = Math.max(-1, Math.min(1, (e.beta - 45) / 45));
+    });
+  }
+
+  el('motion').addEventListener('click', function () {
+    var btn = el('motion');
+    if (typeof DeviceOrientationEvent !== 'undefined' &&
+        typeof DeviceOrientationEvent.requestPermission === 'function') {
+      DeviceOrientationEvent.requestPermission().then(function (state) {
+        if (state === 'granted') { listenTilt(); btn.style.display = 'none'; }
+        else { btn.textContent = 'Permiso denegado. Ajustes → Safari → Movimiento'; }
+      }).catch(function () {
+        btn.textContent = 'El sensor necesita HTTPS';
+      });
+    } else {
+      listenTilt();
+      btn.style.display = 'none';
+    }
+  });
+})();
+</script>
+</body>
+</html>

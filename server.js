@@ -35,25 +35,58 @@ const MIME = {
   '.css': 'text/css; charset=utf-8'
 };
 
+// Al subir los archivos a GitHub es fácil que public/ se aplane. En vez de
+// exigir una estructura, buscamos el archivo donde pueda estar.
+const ROOTS = [
+  path.join(__dirname, 'public'),
+  __dirname,
+  path.join(process.cwd(), 'public'),
+  process.cwd()
+];
+
+function findFile(name, done) {
+  let i = 0;
+  (function next() {
+    if (i >= ROOTS.length) return done(null);
+    const candidate = path.join(ROOTS[i++], name);
+    fs.readFile(candidate, (err, data) => {
+      if (err) return next();
+      done({ path: candidate, data: data });
+    });
+  })();
+}
+
 const server = http.createServer((req, res) => {
   let route = req.url.split('?')[0];
   if (route === '/') route = '/tv.html';
   if (route === '/pad') route = '/pad.html';
 
-  const safe = path.normalize(route).replace(/^(\.\.[/\\])+/, '');
-  const file = path.join(__dirname, 'public', safe);
+  // Diagnóstico: qué archivos ve el servidor realmente.
+  if (route === '/_debug') {
+    const report = ROOTS.map((r) => {
+      let listing;
+      try { listing = fs.readdirSync(r).filter((f) => f !== 'node_modules'); }
+      catch (e) { listing = '(no existe)'; }
+      return r + '\n  ' + (Array.isArray(listing) ? listing.join('  ') : listing);
+    }).join('\n\n');
+    res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end('__dirname: ' + __dirname + '\ncwd: ' + process.cwd() + '\n\n' + report + '\n');
+    return;
+  }
 
-  fs.readFile(file, (err, data) => {
-    if (err) {
-      res.writeHead(404, { 'Content-Type': 'text/plain' });
-      res.end('No existe');
+  const safe = path.normalize(route).replace(/^(\.\.[/\\])+/, '');
+
+  findFile(safe, (found) => {
+    if (!found) {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('No encuentro ' + safe + '. Abre /_debug para ver qué archivos hay.');
       return;
     }
     res.writeHead(200, {
-      'Content-Type': MIME[path.extname(file)] || 'text/plain',
+      'Content-Type': MIME[path.extname(found.path)] || 'text/plain',
       'Cache-Control': 'no-store'
     });
-    res.end(data);
+    res.end(found.data);
   });
 });
 

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Banco de pruebas</title>
+<title>Arena</title>
 <style>
   :root {
     --bg: #0E1633;
@@ -11,238 +11,297 @@
     --edge: #2C3873;
     --ink: #E6EAF7;
     --muted: #8B96C4;
-    --relay: #FFB020;
-    --direct: #3FE0C8;
-    --bad: #FF6B7A;
+    --p1: #FFB020;
+    --p2: #3FE0C8;
   }
   * { box-sizing: border-box; }
   html, body {
-    margin: 0; padding: 0; height: 100%; overflow: hidden;
+    margin: 0; height: 100%; overflow: hidden;
     background: var(--bg); color: var(--ink);
     font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
   }
-  body { padding: 3.5vh 3.5vw; }
-  .screen { display: none; height: 100%; }
-  .screen.on { display: block; }
-
-  /* ---------- Emparejamiento ---------- */
-  #pair { text-align: center; }
-  #pair .lead {
-    font-size: 2.6vw; color: var(--muted); margin: 6vh 0 1vh;
-    font-weight: 400; letter-spacing: 0.01em;
-  }
-  #url {
-    font-size: 4.4vw; font-weight: 700; color: var(--direct);
-    word-break: break-all; margin-bottom: 5vh;
-  }
+  #lobby { padding: 6vh 5vw; text-align: center; }
+  .lead { font-size: 2.3vw; color: var(--muted); margin-bottom: 1vh; }
+  #url { font-size: 3.8vw; font-weight: 700; color: var(--p2); margin-bottom: 3vh; word-break: break-all; }
   #code {
-    font-family: "Courier New", monospace;
-    font-size: 16vw; font-weight: 700; line-height: 1;
-    letter-spacing: 0.12em; margin: 0 0 1vh; text-indent: 0.12em;
+    font-family: "Courier New", monospace; font-size: 14vw; font-weight: 700;
+    line-height: 1; letter-spacing: 0.12em; text-indent: 0.12em; margin-bottom: 3vh;
   }
-  #pair .hint { font-size: 2.1vw; color: var(--muted); }
+  .seats { display: flex; justify-content: center; }
+  .seat { width: 24vw; padding: 1.6vh 1vw; margin: 0 1vw; background: var(--panel); border: 2px solid var(--edge); border-radius: 10px; }
+  .seat.p1 { border-left: 0.8vw solid var(--p1); }
+  .seat.p2 { border-left: 0.8vw solid var(--p2); }
+  .who { font-size: 1.9vw; font-weight: 700; }
+  .st { font-size: 1.4vw; color: var(--muted); margin-top: 0.5vh; }
 
-  /* ---------- Prueba ---------- */
-  #field {
-    width: 100%; height: 46vh; display: block;
-    background: var(--panel); border: 2px solid var(--edge);
+  #game { display: none; position: relative; height: 100%; }
+  canvas { display: block; width: 100%; height: 100%; }
+  #hud {
+    position: absolute; right: 1.6vw; top: 1.6vh; text-align: right;
+    font-family: "Courier New", monospace; font-size: 1.3vw; color: var(--muted);
   }
-  .rows { display: flex; margin-top: 2.5vh; }
-  .col { flex: 1; }
-  .col + .col { margin-left: 2vw; }
-  .card {
-    background: var(--panel); border: 2px solid var(--edge);
-    padding: 1.6vh 1.6vw; height: 100%;
-  }
-  .card.relay { border-left: 0.9vw solid var(--relay); }
-  .card.direct { border-left: 0.9vw solid var(--direct); }
-  .name { font-size: 2.1vw; font-weight: 700; margin-bottom: 0.4vh; }
-  .sub { font-size: 1.35vw; color: var(--muted); margin-bottom: 1.4vh; }
-  .big {
-    font-family: "Courier New", monospace;
-    font-size: 8.5vw; font-weight: 700; line-height: 1;
-  }
-  .big .u { font-size: 2.6vw; color: var(--muted); margin-left: 0.4vw; }
-  .detail {
-    font-family: "Courier New", monospace;
-    font-size: 1.8vw; color: var(--muted); margin-top: 1vh;
-  }
-  .off { color: var(--bad); }
 </style>
 </head>
 <body>
 
-<div id="pair" class="screen on">
+<div id="lobby">
   <div class="lead">Abre esta dirección en el celular</div>
   <div id="url">…</div>
-  <div class="lead">y escribe este código</div>
   <div id="code">····</div>
-  <div class="hint">Los dos aparatos deben estar en el mismo Wi-Fi</div>
-</div>
-
-<div id="test" class="screen">
-  <canvas id="field"></canvas>
-  <div class="rows">
-    <div class="col"><div class="card relay">
-      <div class="name">Por el servidor</div>
-      <div class="sub">WebSocket, sale a internet y vuelve</div>
-      <div class="big"><span id="wsP50">—</span><span class="u">ms</span></div>
-      <div class="detail" id="wsMore">p95 — · máx — · pérdida —</div>
-    </div></div>
-    <div class="col"><div class="card direct">
-      <div class="name">Directo por la red local</div>
-      <div class="sub">WebRTC, celular a TV sin intermediario</div>
-      <div class="big"><span id="rtcP50">—</span><span class="u">ms</span></div>
-      <div class="detail" id="rtcMore">esperando conexión</div>
-    </div></div>
+  <div class="seats">
+    <div class="seat p1"><div class="who">Jugador 1</div><div class="st" id="st0">esperando</div></div>
+    <div class="seat p2"><div class="who">Jugador 2</div><div class="st" id="st1">esperando</div></div>
   </div>
 </div>
+
+<div id="game"><canvas id="cv"></canvas><div id="hud"></div></div>
 
 <script>
 (function () {
   'use strict';
 
-  var proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
-  var ws = new WebSocket(proto + location.host);
-  var pc = null, dc = null;
-
   var el = function (id) { return document.getElementById(id); };
+  var ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host);
+
+  var peers = [null, null];
+  var pads  = [null, null];   // último input de cada mando
+  var rtt   = [null, null];
+  var active = [false, false];
+
   el('url').textContent = location.host + '/pad';
 
-  // Estado que dibuja el canvas
-  var relay = { x: 0.5, y: 0.5, seen: 0 };
-  var direct = { x: 0.5, y: 0.5, seen: 0 };
-  var tilt = { x: 0, y: 0 };
-
-  function show(id) {
-    var all = document.querySelectorAll('.screen');
-    for (var i = 0; i < all.length; i++) all[i].className = 'screen';
-    el(id).className = 'screen on';
-    if (id === 'test') sizeCanvas();
-  }
-
-  // -------------------------------------------------------------------------
-  // Señalización
-  // -------------------------------------------------------------------------
   ws.onopen = function () { ws.send('{"t":"host"}'); };
 
   ws.onmessage = function (ev) {
     var text = ev.data;
-
-    // Eco inmediato del input que llegó por WebSocket.
     if (text.lastIndexOf('{"t":"r"', 0) === 0) {
-      var p = JSON.parse(text);
-      relay.x = p.x; relay.y = p.y; relay.seen = Date.now();
-      if (p.gx !== undefined) { tilt.x = p.gx; tilt.y = p.gy; }
-      ws.send('{"t":"r","c":"ws","e":1,"s":' + p.s + '}');
+      var inp = JSON.parse(text);
+      pads[inp.p] = inp;
+      if (inp.r !== undefined) rtt[inp.p] = inp.r;
       return;
     }
-
     var msg = JSON.parse(text);
     if (msg.t === 'room') { el('code').textContent = msg.code; return; }
-    if (msg.t === 'peer') { show('test'); startRTC(); return; }
-    if (msg.t === 'gone') { location.reload(); return; }
-    if (msg.t === 'signal') { onSignal(msg.data); return; }
+    if (msg.t === 'peer') { el('st' + msg.slot).textContent = 'conectando'; startRTC(msg.slot); return; }
+    if (msg.t === 'left') { el('st' + msg.slot).textContent = 'se fue'; active[msg.slot] = false; pads[msg.slot] = null; return; }
+    if (msg.t === 'signal') { onSignal(msg.slot, msg.data); return; }
   };
 
-  ws.onclose = function () {
-    el('code').textContent = '····';
-    el('url').textContent = 'Se cayó la conexión. Recarga la página.';
-  };
+  function join(slot) {
+    if (active[slot]) return;
+    active[slot] = true;
+    el('st' + slot).textContent = 'listo';
+    ships[slot].x = slot === 0 ? 0.3 : 0.7;
+    ships[slot].y = 0.5;
+    ships[slot].vx = 0; ships[slot].vy = 0;
+    el('lobby').style.display = 'none';
+    el('game').style.display = 'block';
+    size();
+  }
 
   // -------------------------------------------------------------------------
-  // WebRTC. El TV solo responde; ofrecer es más frágil en navegadores viejos.
+  // Una conexión por mando
   // -------------------------------------------------------------------------
-  function startRTC() {
-    if (typeof RTCPeerConnection === 'undefined') {
-      el('rtcMore').innerHTML = '<span class="off">este TV no soporta WebRTC</span>';
-      return;
-    }
-    pc = new RTCPeerConnection({
-      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
-    });
+  function startRTC(slot) {
+    if (typeof RTCPeerConnection === 'undefined') { el('st' + slot).textContent = 'sin WebRTC'; join(slot); return; }
+    var pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+    peers[slot] = { pc: pc };
+
     pc.onicecandidate = function (e) {
-      if (e.candidate) ws.send(JSON.stringify({ t: 'signal', data: { ice: e.candidate } }));
+      if (e.candidate) ws.send(JSON.stringify({ t: 'signal', slot: slot, data: { ice: e.candidate } }));
     };
     pc.oniceconnectionstatechange = function () {
-      if (pc.iceConnectionState === 'failed') {
-        el('rtcMore').innerHTML = '<span class="off">no se pudo conectar directo</span>';
-      }
+      if (pc.iceConnectionState === 'failed') { el('st' + slot).textContent = 'por el servidor'; join(slot); }
     };
     pc.ondatachannel = function (e) {
-      dc = e.channel;
-      dc.onmessage = function (ev) {
-        var p = JSON.parse(ev.data);
-        direct.x = p.x; direct.y = p.y; direct.seen = Date.now();
-        if (p.gx !== undefined) { tilt.x = p.gx; tilt.y = p.gy; }
-        dc.send('{"c":"rtc","e":1,"s":' + p.s + '}');
+      var dc = e.channel;
+      dc.onopen = function () { join(slot); };
+      dc.onmessage = function (m) {
+        var p = JSON.parse(m.data);
+        pads[slot] = p;
+        if (p.r !== undefined) rtt[slot] = p.r;
+        dc.send('{"s":' + p.s + '}');
       };
     };
+
+    // Si el canal no abre, ICE puede quedarse en "checking" sin llegar nunca a
+    // "failed". Entramos igual y el mando sigue por la ruta del servidor.
+    setTimeout(function () {
+      if (!active[slot]) { el('st' + slot).textContent = 'por el servidor'; join(slot); }
+    }, 6000);
   }
 
-  function onSignal(data) {
-    if (!pc) return;
+  function onSignal(slot, data) {
+    var peer = peers[slot];
+    if (!peer) return;
     if (data.sdp) {
-      pc.setRemoteDescription(new RTCSessionDescription(data.sdp))
-        .then(function () { return pc.createAnswer(); })
-        .then(function (answer) { return pc.setLocalDescription(answer); })
-        .then(function () {
-          ws.send(JSON.stringify({ t: 'signal', data: { sdp: pc.localDescription } }));
-        })
-        .catch(function (err) {
-          el('rtcMore').innerHTML = '<span class="off">error: ' + err.message + '</span>';
-        });
+      peer.pc.setRemoteDescription(new RTCSessionDescription(data.sdp))
+        .then(function () { return peer.pc.createAnswer(); })
+        .then(function (a) { return peer.pc.setLocalDescription(a); })
+        .then(function () { ws.send(JSON.stringify({ t: 'signal', slot: slot, data: { sdp: peer.pc.localDescription } })); })
+        .catch(function () { el('st' + slot).textContent = 'falló la conexión directa'; });
     } else if (data.ice) {
-      pc.addIceCandidate(new RTCIceCandidate(data.ice)).catch(function () {});
-    } else if (data.stats) {
-      el('wsP50').textContent = data.stats.wsP50;
-      el('wsMore').textContent = data.stats.wsMore;
-      el('rtcP50').textContent = data.stats.rtcP50;
-      el('rtcMore').textContent = data.stats.rtcMore;
+      peer.pc.addIceCandidate(new RTCIceCandidate(data.ice)).catch(function () {});
     }
   }
 
   // -------------------------------------------------------------------------
-  // Dibujo. Los dos cuadros corren la misma carrera; el retraso se ve solo.
+  // Simulación. Coordenadas 0..1 para no depender de la resolución del TV.
+  // El stick apunta, A empuja en esa dirección, B frena.
   // -------------------------------------------------------------------------
-  var cv = el('field'), cx = cv.getContext('2d');
+  var DEAD = 0.16;          // zona muerta: el pulgar nunca vuelve al centro exacto
+  var TURN = 9.0;           // rad/s de giro hacia donde apunta el stick
+  var ACCEL = 1.25;         // empuje de A
+  var DRAG = 0.62;          // rozamiento por segundo sin tocar nada
+  var BRAKE = 0.03;         // rozamiento con B apretado
+  var VMAX = 0.85;
+  var R = 0.022;            // radio de la nave
+  var PR = 0.026;           // radio de las monedas
 
-  function sizeCanvas() {
-    cv.width = cv.clientWidth;
-    cv.height = cv.clientHeight;
-  }
-  window.addEventListener('resize', sizeCanvas);
+  var ships = [
+    { x: 0.3, y: 0.5, vx: 0, vy: 0, h: 0, score: 0 },
+    { x: 0.7, y: 0.5, vx: 0, vy: 0, h: Math.PI, score: 0 }
+  ];
+  var coins = [];
+  for (var c = 0; c < 5; c++) coins.push(spawn());
 
-  function box(state, color) {
-    var stale = Date.now() - state.seen > 700;
-    var s = Math.max(28, cv.width * 0.035);
-    var x = state.x * (cv.width - s);
-    var y = state.y * (cv.height - s);
-    cx.globalAlpha = stale ? 0.18 : 1;
-    cx.fillStyle = color;
-    cx.fillRect(x, y, s, s);
-    cx.globalAlpha = 1;
+  function spawn() {
+    return { x: 0.08 + Math.random() * 0.84, y: 0.10 + Math.random() * 0.80 };
   }
+
+  function angleDiff(a, b) {
+    var d = (a - b) % (Math.PI * 2);
+    if (d > Math.PI) d -= Math.PI * 2;
+    if (d < -Math.PI) d += Math.PI * 2;
+    return d;
+  }
+
+  function step(dt) {
+    for (var i = 0; i < 2; i++) {
+      if (!active[i]) continue;
+      var s = ships[i], p = pads[i];
+      var sx = p ? p.x : 0, sy = p ? p.y : 0;
+      var mag = Math.sqrt(sx * sx + sy * sy);
+
+      if (mag > DEAD) {
+        // Reescalar para que el movimiento arranque en cero al salir de la
+        // zona muerta, en vez de dar un salto.
+        var target = Math.atan2(sy, sx);
+        var turn = TURN * dt * Math.min(1, (mag - DEAD) / (1 - DEAD) + 0.35);
+        var d = angleDiff(target, s.h);
+        s.h += Math.abs(d) < turn ? d : (d > 0 ? turn : -turn);
+        s.h = s.h % (Math.PI * 2);   // sin esto crece sin límite y pierde precisión
+      }
+
+      if (p && p.a) {
+        s.vx += Math.cos(s.h) * ACCEL * dt;
+        s.vy += Math.sin(s.h) * ACCEL * dt;
+      }
+
+      var k = Math.pow(p && p.b ? BRAKE : DRAG, dt);
+      s.vx *= k; s.vy *= k;
+
+      var sp = Math.sqrt(s.vx * s.vx + s.vy * s.vy);
+      if (sp > VMAX) { s.vx *= VMAX / sp; s.vy *= VMAX / sp; }
+
+      s.x += s.vx * dt;
+      s.y += s.vy * dt;
+
+      // Paredes: rebote amortiguado
+      if (s.x < R) { s.x = R; s.vx = Math.abs(s.vx) * 0.5; }
+      if (s.x > 1 - R) { s.x = 1 - R; s.vx = -Math.abs(s.vx) * 0.5; }
+      if (s.y < R) { s.y = R; s.vy = Math.abs(s.vy) * 0.5; }
+      if (s.y > 1 - R) { s.y = 1 - R; s.vy = -Math.abs(s.vy) * 0.5; }
+
+      for (var j = 0; j < coins.length; j++) {
+        var dx = s.x - coins[j].x, dy = s.y - coins[j].y;
+        if (Math.sqrt(dx * dx + dy * dy) < R + PR) { s.score++; coins[j] = spawn(); }
+      }
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Render
+  // -------------------------------------------------------------------------
+  var cv = el('cv'), cx = cv.getContext('2d');
+  function size() { cv.width = cv.clientWidth; cv.height = cv.clientHeight; }
+  window.addEventListener('resize', size);
+
+  var COLORS = ['#FFB020', '#3FE0C8'];
 
   function draw() {
-    cx.fillStyle = '#182150';
-    cx.fillRect(0, 0, cv.width, cv.height);
+    var W = cv.width, H = cv.height, S = Math.min(W, H);
+    cx.fillStyle = '#0E1633';
+    cx.fillRect(0, 0, W, H);
 
-    // Retícula movida por el giroscopio
-    var gx = (0.5 + tilt.x * 0.5) * cv.width;
-    var gy = (0.5 + tilt.y * 0.5) * cv.height;
     cx.strokeStyle = '#2C3873';
-    cx.lineWidth = 2;
-    cx.beginPath();
-    cx.moveTo(gx, 0); cx.lineTo(gx, cv.height);
-    cx.moveTo(0, gy); cx.lineTo(cv.width, gy);
-    cx.stroke();
+    cx.lineWidth = Math.max(2, S * 0.004);
+    cx.strokeRect(0, 0, W, H);
 
-    box(relay, '#FFB020');
-    box(direct, '#3FE0C8');
-    requestAnimationFrame(draw);
+    for (var j = 0; j < coins.length; j++) {
+      cx.fillStyle = '#8B96C4';
+      cx.beginPath();
+      cx.arc(coins[j].x * W, coins[j].y * H, PR * S, 0, Math.PI * 2);
+      cx.fill();
+    }
+
+    for (var i = 0; i < 2; i++) {
+      if (!active[i]) continue;
+      var s = ships[i], p = pads[i];
+      var x = s.x * W, y = s.y * H, r = R * S;
+
+      // Llama de empuje, para que se vea qué hace el botón A
+      if (p && p.a) {
+        cx.fillStyle = 'rgba(230,234,247,0.45)';
+        cx.beginPath();
+        cx.moveTo(x - Math.cos(s.h) * r * 1.1 - Math.sin(s.h) * r * 0.45,
+                  y - Math.sin(s.h) * r * 1.1 + Math.cos(s.h) * r * 0.45);
+        cx.lineTo(x - Math.cos(s.h) * r * 2.3, y - Math.sin(s.h) * r * 2.3);
+        cx.lineTo(x - Math.cos(s.h) * r * 1.1 + Math.sin(s.h) * r * 0.45,
+                  y - Math.sin(s.h) * r * 1.1 - Math.cos(s.h) * r * 0.45);
+        cx.fill();
+      }
+
+      cx.fillStyle = COLORS[i];
+      cx.beginPath();
+      cx.moveTo(x + Math.cos(s.h) * r * 1.5, y + Math.sin(s.h) * r * 1.5);
+      cx.lineTo(x + Math.cos(s.h + 2.5) * r, y + Math.sin(s.h + 2.5) * r);
+      cx.lineTo(x + Math.cos(s.h - 2.5) * r, y + Math.sin(s.h - 2.5) * r);
+      cx.fill();
+
+      if (p && p.b) {
+        cx.strokeStyle = '#E6EAF7';
+        cx.lineWidth = Math.max(2, S * 0.004);
+        cx.beginPath();
+        cx.arc(x, y, r * 1.9, 0, Math.PI * 2);
+        cx.stroke();
+      }
+    }
+
+    // Marcador
+    cx.font = '700 ' + Math.round(H * 0.09) + 'px "Courier New", monospace';
+    cx.textBaseline = 'top';
+    var xs = W * 0.03;
+    for (var k = 0; k < 2; k++) {
+      if (!active[k]) continue;
+      cx.fillStyle = COLORS[k];
+      cx.textAlign = 'left';
+      cx.fillText(ships[k].score, xs, H * 0.03);
+      xs += W * 0.09;
+    }
+
+    var parts = [];
+    for (var m = 0; m < 2; m++) if (active[m] && rtt[m] !== null) parts.push('J' + (m + 1) + ' ' + rtt[m] + 'ms');
+    el('hud').textContent = parts.join('  ');
   }
-  draw();
+
+  var last = performance.now();
+  (function loop(now) {
+    var dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    if (active[0] || active[1]) { step(dt); draw(); }
+    requestAnimationFrame(loop);
+  })(last);
 })();
 </script>
 </body>

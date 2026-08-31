@@ -1,7 +1,7 @@
 {
-  "name": "arcade-stick",
+  "name": "arcade-race",
   "version": "1.0.0",
-  "description": "Prueba de stick analógico y botones: TV como pantalla, celulares como mandos",
+  "description": "Carrera para dos jugadores: TV como pantalla, celulares como mandos",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"

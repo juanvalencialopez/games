@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Carrera</title>
+<title>Arcade</title>
 <style>
   :root {
     --bg: #0E1633;
@@ -33,9 +33,8 @@
   .seat.p2 { border-left: 0.8vw solid var(--p2); }
   .who { font-size: 1.9vw; font-weight: 700; }
   .st { font-size: 1.4vw; color: var(--muted); margin-top: 0.5vh; }
-  #call { margin-top: 3vh; font-size: 2vw; color: var(--muted); min-height: 3vh; }
 
-  #game { display: none; position: relative; height: 100%; }
+  #screen { display: none; position: relative; height: 100%; }
   canvas { display: block; width: 100%; height: 100%; }
 </style>
 </head>
@@ -49,10 +48,30 @@
     <div class="seat p1"><div class="who">Jugador 1</div><div class="st" id="st0">esperando</div></div>
     <div class="seat p2"><div class="who">Jugador 2</div><div class="st" id="st1">esperando</div></div>
   </div>
-  <div id="call"></div>
 </div>
 
-<div id="game"><canvas id="cv"></canvas></div>
+<div id="screen"><canvas id="cv"></canvas></div>
+
+<script>
+// ===========================================================================
+// SDK
+//
+// Los juegos se registran aquí y el shell les da el reloj, el canvas y el
+// estado de los mandos. Un juego nunca toca la red ni sabe que existe WebRTC.
+// Esa frontera es lo que permite añadir el cuarto juego sin tocar nada más.
+// ===========================================================================
+window.Arcade = {
+  games: [],
+  register: function (game) { window.Arcade.games.push(game); },
+  COLORS: ['#FFB020', '#3FE0C8'],
+  BG: '#0E1633', PANEL: '#182150', EDGE: '#2C3873',
+  INK: '#E6EAF7', MUTED: '#8B96C4', WARN: '#FF6B7A'
+};
+</script>
+
+<script src="games/coins.js"></script>
+<script src="games/shooter.js"></script>
+<script src="games/racer3d.js"></script>
 
 <script>
 (function () {
@@ -63,11 +82,16 @@
 
   var peers  = [null, null];
   var pads   = [null, null];
+  var prev   = [null, null];   // estado anterior, para detectar flancos
+  var edges  = [{ a: false, b: false }, { a: false, b: false }];
   var rtt    = [null, null];
   var joined = [false, false];
 
   el('url').textContent = location.host + '/pad';
 
+  // -------------------------------------------------------------------------
+  // Red
+  // -------------------------------------------------------------------------
   ws.onopen = function () { ws.send('{"t":"host"}'); };
 
   ws.onmessage = function (ev) {
@@ -89,7 +113,7 @@
     if (joined[slot]) return;
     joined[slot] = true;
     el('st' + slot).textContent = 'listo';
-    el('call').textContent = 'Aprieta A para partir';
+    if (mode === 'lobby') { mode = 'menu'; el('lobby').style.display = 'none'; el('screen').style.display = 'block'; size(); }
   }
 
   function startRTC(slot) {
@@ -132,288 +156,142 @@
     }
   }
 
-  // ==========================================================================
-  // JUEGO
-  //
-  // Mundo en metros. La cámara sigue a quien va adelante, así que quedarse
-  // atrás te empuja fuera de pantalla. Ahí está toda la tensión: no compites
-  // contra un cronómetro, compites contra el encuadre.
-  // ==========================================================================
-  var VIEW = 120;                      // metros visibles de alto
-  var FINISH = 1800;                   // largo de la carrera
-  var ROAD_L = 0.12, ROAD_R = 0.88;    // bordes de la pista
+  // -------------------------------------------------------------------------
+  // Estado del shell
+  // -------------------------------------------------------------------------
+  var mode = 'lobby';        // lobby | menu | play | result
+  var game = null;
+  var pick = 0;
+  var stickLatch = [false, false];
+  var result = null, resultAt = 0;
 
-  var ACCEL = 22, BRAKE = 50, DRAG = 6, VMAX = 58;
-  // El pasto tiene que frenar, no matar: si el rozamiento supera a ACCEL el
-  // auto se detiene para siempre y no hay forma de volver a la pista.
-  var OFFROAD_DRAG = 14, OFFROAD_VMAX = 24;
-  var STEER = 0.85;                    // fracción de pista por segundo a tope
-  var CAR_W = 0.075, CAR_L = 7.5;
-  var SPIN_TIME = 0.9;
-
-  var phase = 'lobby';                 // lobby | countdown | race | done
-  var startAt = 0, elapsed = 0, winner = -1;
-
-  function newCar(i) {
-    return { x: i === 0 ? 0.36 : 0.64, y: 0, v: 0, spin: 0, hits: 0, finished: 0 };
-  }
-  var cars = [newCar(0), newCar(1)];
-
-  // Obstáculos deterministas: el mismo sembrado para los dos, si no la carrera
-  // no sería justa. Se densifican hacia el final.
-  var obstacles = [];
-  (function seed() {
-    var s = 12345;
-    function rnd() { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff; }
-    var y = 150;
-    while (y < FINISH - 70) {
-      var n = rnd() < 0.3 + 0.35 * (y / FINISH) ? 2 : 1;
-      var used = [];
-      for (var k = 0; k < n; k++) {
-        var x, tries = 0, ok;
-        do {
-          x = ROAD_L + 0.07 + rnd() * (ROAD_R - ROAD_L - 0.14);
-          ok = true;
-          for (var u = 0; u < used.length; u++) if (Math.abs(used[u] - x) < 0.17) ok = false;
-          tries++;
-        } while (!ok && tries < 8);
-        used.push(x);
-        obstacles.push({ x: x, y: y, hit: [false, false] });
-      }
-      var gap = 48 - 24 * (y / FINISH);
-      y += gap * (0.7 + rnd() * 0.6);
-    }
-  })();
-
-  function anyJoined() { return joined[0] || joined[1]; }
-
-  function startRace() {
-    cars = [newCar(0), newCar(1)];
-    for (var i = 0; i < obstacles.length; i++) obstacles[i].hit = [false, false];
-    winner = -1;
-    elapsed = 0;
-    phase = 'countdown';
-    startAt = performance.now() + 3200;
-    el('lobby').style.display = 'none';
-    el('game').style.display = 'block';
-    size();
-  }
-
-  function leaderY() {
-    var m = 0;
-    for (var i = 0; i < 2; i++) if (joined[i] && cars[i].y > m) m = cars[i].y;
-    return m;
-  }
-
-  function step(dt) {
-    var pressA = (pads[0] && pads[0].a) || (pads[1] && pads[1].a);
-
-    if (phase === 'lobby') { if (anyJoined() && pressA) startRace(); return; }
-    if (phase === 'done') {
-      if (pressA && performance.now() - startAt > 1500) startRace();
-      return;
-    }
-    if (phase === 'countdown') {
-      if (performance.now() >= startAt) { phase = 'race'; startAt = performance.now(); }
-      return;
-    }
-
-    elapsed = (performance.now() - startAt) / 1000;
-    var camY = leaderY() - VIEW * 0.32;
-
-    for (var i = 0; i < 2; i++) {
-      if (!joined[i]) continue;
-      var c = cars[i], p = pads[i];
-      if (c.finished) continue;
-
-      var offroad = c.x < ROAD_L || c.x > ROAD_R;
-
-      if (c.spin > 0) {
-        c.spin -= dt;
-        c.v -= DRAG * 2.5 * dt;
-      } else {
-        if (p && p.a) c.v += ACCEL * dt;
-        if (p && p.b) c.v -= BRAKE * dt;
-        if (!p || (!p.a && !p.b)) c.v -= DRAG * dt;
-        if (offroad) c.v -= OFFROAD_DRAG * dt;
-
-        // Girar necesita velocidad. Detenido no se dobla, como un auto real.
-        var grip = Math.min(1, c.v / 22);
-        if (p) c.x += p.x * STEER * grip * dt;
-      }
-
-      var top = offroad ? OFFROAD_VMAX : VMAX;
-      if (c.v > top) c.v = top;
-      if (c.v < 0) c.v = 0;
-
-      c.x = Math.max(0.03, Math.min(0.97, c.x));
-      c.y += c.v * dt;
-
-      // Marcamos el choque por jugador, si no el segundo auto pasaría limpio
-      // por un cono que ya reventó el primero.
-      for (var j = 0; j < obstacles.length; j++) {
-        var o = obstacles[j];
-        if (o.hit[i]) continue;
-        if (Math.abs(o.y - c.y) > CAR_L) continue;
-        if (Math.abs(o.x - c.x) > CAR_W) continue;
-        o.hit[i] = true;
-        c.hits++;
-        c.spin = SPIN_TIME;
-        c.v *= 0.3;
-      }
-
-      if (c.y < camY) { c.y = camY; c.v *= 0.55; }
-
-      if (c.y >= FINISH && !c.finished) {
-        c.finished = elapsed;
-        if (winner === -1) { winner = i; phase = 'done'; startAt = performance.now(); }
-      }
-    }
-  }
-
-  // ==========================================================================
-  // Render
-  // ==========================================================================
   var cv = el('cv'), cx = cv.getContext('2d');
   function size() { cv.width = cv.clientWidth; cv.height = cv.clientHeight; }
   window.addEventListener('resize', size);
 
-  var COLORS = ['#FFB020', '#3FE0C8'];
+  // API que ve cada juego
+  var api = {
+    pads: pads,
+    joined: joined,
+    rtt: rtt,
+    colors: window.Arcade.COLORS,
+    pressed: function (slot, btn) { return edges[slot][btn]; },
+    anyPressed: function (btn) { return edges[0][btn] || edges[1][btn]; },
+    count: function () { return (joined[0] ? 1 : 0) + (joined[1] ? 1 : 0); },
+    finish: function (text, winner) {
+      result = { text: text, winner: winner === undefined ? -1 : winner };
+      resultAt = performance.now();
+      mode = 'result';
+    }
+  };
 
-  function draw() {
-    var W = cv.width, H = cv.height;
-    var camY = leaderY() - VIEW * 0.32;
-    var mPx = H / VIEW;
-    function toY(worldY) { return H - (worldY - camY) * mPx; }
+  function computeEdges() {
+    for (var i = 0; i < 2; i++) {
+      var p = pads[i], q = prev[i];
+      edges[i].a = !!(p && p.a) && !(q && q.a);
+      edges[i].b = !!(p && p.b) && !(q && q.b);
+      prev[i] = p ? { a: p.a, b: p.b } : null;
+    }
+  }
 
-    cx.fillStyle = '#101B26';
+  // -------------------------------------------------------------------------
+  // Menú
+  // -------------------------------------------------------------------------
+  function menuStep() {
+    var games = window.Arcade.games;
+
+    // El stick funciona por flancos: si no, un empujón recorre la lista entera.
+    for (var i = 0; i < 2; i++) {
+      var p = pads[i];
+      if (!p) continue;
+      if (Math.abs(p.y) > 0.55) {
+        if (!stickLatch[i]) {
+          pick = (pick + (p.y > 0 ? 1 : -1) + games.length) % games.length;
+          stickLatch[i] = true;
+        }
+      } else if (Math.abs(p.y) < 0.3) stickLatch[i] = false;
+    }
+
+    if (api.anyPressed('a') && games.length) {
+      game = games[pick];
+      game.init(api);
+      mode = 'play';
+    }
+  }
+
+  function menuDraw(W, H) {
+    var games = window.Arcade.games;
+    cx.fillStyle = window.Arcade.BG;
     cx.fillRect(0, 0, W, H);
 
-    cx.fillStyle = '#182150';
-    cx.fillRect(ROAD_L * W, 0, (ROAD_R - ROAD_L) * W, H);
-
-    cx.fillStyle = '#2C3873';
-    cx.fillRect(ROAD_L * W - W * 0.006, 0, W * 0.006, H);
-    cx.fillRect(ROAD_R * W, 0, W * 0.006, H);
-
-    // Líneas de carril ancladas al mundo: son las que dan sensación de avance.
-    cx.strokeStyle = '#2C3873';
-    cx.lineWidth = Math.max(2, W * 0.004);
-    var dash = 9;
-    var first = Math.floor(camY / (dash * 2)) * (dash * 2);
-    for (var ly = first; ly < camY + VIEW + dash * 2; ly += dash * 2) {
-      for (var lane = 1; lane <= 2; lane++) {
-        var lx = (ROAD_L + (ROAD_R - ROAD_L) * (lane / 3)) * W;
-        cx.beginPath();
-        cx.moveTo(lx, toY(ly));
-        cx.lineTo(lx, toY(ly + dash));
-        cx.stroke();
-      }
-    }
-
-    if (FINISH > camY - 10 && FINISH < camY + VIEW + 10) {
-      var fy = toY(FINISH), sq = W * 0.02;
-      cx.fillStyle = '#E6EAF7';
-      for (var q = 0; q * sq < (ROAD_R - ROAD_L) * W; q++) {
-        cx.fillRect(ROAD_L * W + q * sq, fy - (q % 2 === 0 ? sq : sq * 2), sq, sq);
-      }
-    }
-
-    for (var j = 0; j < obstacles.length; j++) {
-      var o = obstacles[j];
-      if (o.y < camY - 20 || o.y > camY + VIEW + 20) continue;
-      var oy = toY(o.y), ox = o.x * W;
-      var ow = CAR_W * W * 0.95, oh = CAR_L * mPx * 0.85;
-      cx.fillStyle = '#FF6B7A';
-      cx.beginPath();
-      cx.moveTo(ox, oy - oh / 2);
-      cx.lineTo(ox + ow / 2, oy + oh / 2);
-      cx.lineTo(ox - ow / 2, oy + oh / 2);
-      cx.fill();
-    }
-
-    for (var i = 0; i < 2; i++) {
-      if (!joined[i]) continue;
-      var c = cars[i];
-      if (c.spin > 0 && Math.floor(c.spin * 12) % 2 === 0) continue;   // parpadeo
-      var y = toY(c.y), x = c.x * W, w = CAR_W * W, l = CAR_L * mPx;
-
-      cx.fillStyle = COLORS[i];
-      cx.fillRect(x - w / 2, y - l / 2, w, l);
-      cx.fillStyle = 'rgba(14,22,51,0.55)';
-      cx.fillRect(x - w * 0.32, y - l * 0.18, w * 0.64, l * 0.34);
-
-      if (pads[i] && pads[i].b && c.v > 1) {
-        cx.fillStyle = '#FF6B7A';
-        cx.fillRect(x - w / 2, y + l / 2 - l * 0.12, w, l * 0.12);
-      }
-    }
-
-    hud(W, H);
-  }
-
-  function hud(W, H) {
-    var bw = W * 0.016, bh = H * 0.62, bx = W * 0.035, by = H * 0.2;
-    for (var i = 0; i < 2; i++) {
-      if (!joined[i]) continue;
-      var x = bx + i * bw * 2.2;
-      cx.fillStyle = '#182150';
-      cx.fillRect(x, by, bw, bh);
-      var f = Math.min(1, cars[i].y / FINISH);
-      cx.fillStyle = COLORS[i];
-      cx.fillRect(x, by + bh * (1 - f), bw, bh * f);
-    }
-
-    cx.textBaseline = 'top';
-    cx.textAlign = 'right';
-    for (var k = 0; k < 2; k++) {
-      if (!joined[k]) continue;
-      var ty = H * 0.04 + k * H * 0.075;
-      cx.fillStyle = COLORS[k];
-      cx.font = '700 ' + Math.round(H * 0.05) + 'px "Courier New", monospace';
-      cx.fillText(Math.round(cars[k].v) + ' km/h', W - W * 0.03, ty);
-      cx.fillStyle = '#8B96C4';
-      cx.font = '400 ' + Math.round(H * 0.024) + 'px "Courier New", monospace';
-      cx.fillText('J' + (k + 1) + '  golpes ' + cars[k].hits +
-                  (rtt[k] !== null ? '   ' + rtt[k] + 'ms' : ''),
-                  W - W * 0.03, ty + H * 0.053);
-    }
-
     cx.textAlign = 'center';
-    if (phase === 'countdown') {
-      var left = Math.ceil((startAt - performance.now()) / 1000);
-      cx.fillStyle = '#E6EAF7';
-      cx.font = '700 ' + Math.round(H * 0.28) + 'px "Helvetica Neue", Arial, sans-serif';
-      cx.fillText(left > 0 ? left : 'YA', W / 2, H * 0.32);
+    cx.textBaseline = 'top';
+    cx.fillStyle = window.Arcade.MUTED;
+    cx.font = '400 ' + Math.round(H * 0.032) + 'px "Helvetica Neue", Arial, sans-serif';
+    cx.fillText('Stick arriba y abajo para elegir · A para jugar', W / 2, H * 0.06);
+
+    var top = H * 0.20, rowH = H * 0.17;
+    for (var i = 0; i < games.length; i++) {
+      var y = top + i * rowH;
+      var on = i === pick;
+      cx.fillStyle = on ? window.Arcade.PANEL : 'rgba(24,33,80,0.45)';
+      cx.fillRect(W * 0.18, y, W * 0.64, rowH * 0.82);
+      if (on) {
+        cx.fillStyle = window.Arcade.COLORS[0];
+        cx.fillRect(W * 0.18, y, W * 0.008, rowH * 0.82);
+      }
+      cx.textAlign = 'left';
+      cx.fillStyle = on ? window.Arcade.INK : window.Arcade.MUTED;
+      cx.font = '700 ' + Math.round(H * 0.055) + 'px "Helvetica Neue", Arial, sans-serif';
+      cx.fillText(games[i].name, W * 0.22, y + rowH * 0.14);
+      cx.fillStyle = window.Arcade.MUTED;
+      cx.font = '400 ' + Math.round(H * 0.028) + 'px "Helvetica Neue", Arial, sans-serif';
+      cx.fillText(games[i].hint, W * 0.22, y + rowH * 0.48);
     }
 
-    if (phase === 'race') {
-      cx.fillStyle = '#8B96C4';
-      cx.font = '400 ' + Math.round(H * 0.034) + 'px "Courier New", monospace';
-      cx.fillText(elapsed.toFixed(1) + ' s', W / 2, H * 0.04);
-    }
-
-    if (phase === 'done') {
-      cx.fillStyle = 'rgba(14,22,51,0.85)';
-      cx.fillRect(0, H * 0.26, W, H * 0.44);
-      cx.fillStyle = COLORS[winner];
-      cx.font = '700 ' + Math.round(H * 0.1) + 'px "Helvetica Neue", Arial, sans-serif';
-      cx.fillText('Gana el jugador ' + (winner + 1), W / 2, H * 0.32);
-      cx.fillStyle = '#E6EAF7';
-      cx.font = '400 ' + Math.round(H * 0.042) + 'px "Courier New", monospace';
-      cx.fillText(cars[winner].finished.toFixed(1) + ' s    ' + cars[winner].hits + ' golpes', W / 2, H * 0.46);
-      cx.fillStyle = '#8B96C4';
-      cx.font = '400 ' + Math.round(H * 0.036) + 'px "Helvetica Neue", Arial, sans-serif';
-      cx.fillText('Aprieta A para otra carrera', W / 2, H * 0.57);
-    }
+    cx.textAlign = 'right';
+    cx.fillStyle = window.Arcade.MUTED;
+    cx.font = '400 ' + Math.round(H * 0.026) + 'px "Courier New", monospace';
+    var line = [];
+    for (var k = 0; k < 2; k++) if (joined[k]) line.push('J' + (k + 1) + (rtt[k] !== null ? ' ' + rtt[k] + 'ms' : ''));
+    cx.fillText(line.join('   '), W * 0.96, H * 0.06);
   }
 
+  // -------------------------------------------------------------------------
+  // Resultado
+  // -------------------------------------------------------------------------
+  function resultStep() {
+    if (performance.now() - resultAt > 1200 && api.anyPressed('a')) { mode = 'menu'; game = null; }
+  }
+
+  function resultDraw(W, H) {
+    cx.fillStyle = 'rgba(14,22,51,0.86)';
+    cx.fillRect(0, H * 0.26, W, H * 0.44);
+    cx.textAlign = 'center';
+    cx.textBaseline = 'top';
+    cx.fillStyle = result.winner >= 0 ? window.Arcade.COLORS[result.winner] : window.Arcade.INK;
+    cx.font = '700 ' + Math.round(H * 0.085) + 'px "Helvetica Neue", Arial, sans-serif';
+    cx.fillText(result.text, W / 2, H * 0.35);
+    cx.fillStyle = window.Arcade.MUTED;
+    cx.font = '400 ' + Math.round(H * 0.036) + 'px "Helvetica Neue", Arial, sans-serif';
+    cx.fillText('A para volver al menú', W / 2, H * 0.55);
+  }
+
+  // -------------------------------------------------------------------------
+  // Bucle
+  // -------------------------------------------------------------------------
   var last = performance.now();
   (function loop(now) {
     var dt = Math.min(0.05, (now - last) / 1000);
     last = now;
-    step(dt);
-    if (phase !== 'lobby') draw();
+    computeEdges();
+
+    if (mode !== 'lobby') {
+      var W = cv.width, H = cv.height;
+      if (mode === 'menu') { menuStep(); menuDraw(W, H); }
+      else if (mode === 'play') { game.step(dt, api); game.draw(cx, W, H, api); }
+      else if (mode === 'result') { game.draw(cx, W, H, api); resultStep(); resultDraw(W, H); }
+    }
     requestAnimationFrame(loop);
   })(last);
 })();

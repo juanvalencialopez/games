@@ -1,7 +1,7 @@
 {
-  "name": "arcade-latency-test",
+  "name": "arcade-stick",
   "version": "1.0.0",
-  "description": "Banco de pruebas de latencia TV + celular para plataforma arcade",
+  "description": "Prueba de stick analógico y botones: TV como pantalla, celulares como mandos",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
